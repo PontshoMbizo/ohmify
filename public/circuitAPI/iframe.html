@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>CircuitJS Iframe</title>
+
+  <!-- Load CircuitJS (your actual path!) -->
+  <script src="/circuitAPI/circuitjs1/circuitjs1.js"></script>
+
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+    }
+  </style>
+</head>
+
+<body>
+<script>
+  // CircuitJS loads asynchronously — wait until ready
+  window.addEventListener("load", () => {
+    console.log("[IFRAME] Loaded, waiting for sim...");
+
+    // Wait until sim is injected by CircuitJS (it attaches window.sim)
+    const waitForSim = setInterval(() => {
+      if (window.sim) {
+        clearInterval(waitForSim);
+        console.log("[IFRAME] CircuitJS detected:", window.sim);
+
+        setupMessageAPI();
+      }
+    }, 100);
+  });
+
+  function setupMessageAPI() {
+    window.addEventListener("message", (event) => {
+      console.log("[IFRAME] Message received:", event.data);
+
+      if (!event.data) return;
+
+      // === GET WAVEFORMS =========================================
+      if (event.data.type === "getWaveforms") {
+        try {
+          const wave = sim.getSimWaveforms
+            ? sim.getSimWaveforms()              // newer custom build
+            : sim.getWaveforms?.();              // older exposed prototype
+
+          event.source.postMessage(
+            { type: "waveformsData", payload: wave },
+            event.origin
+          );
+        } catch (err) {
+          console.error(err);
+        }
+      }
+
+      // === GET NODE VOLTAGE ======================================
+      if (event.data.type === "getVoltage") {
+        const { node } = event.data;
+        let v = 0;
+
+        try {
+          v = sim.getVoltage(node);
+        } catch (err) {
+          console.error(err);
+        }
+
+        event.source.postMessage(
+          { type: "voltageData", node, voltage: v },
+          event.origin
+        );
+      }
+    });
+  }
+</script>
+
+</body>
+</html>

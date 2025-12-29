@@ -1,0 +1,42 @@
+AMElm.java:    String dump() {
+AmmeterElm.java:    String dump() {
+CC2Elm.java:	String dump() {
+Counter2Elm.java:	String dump() {
+CustomCompositeElm.java:    public String dump() {
+CustomCompositeElm.java:    String dumpModel() {
+CustomTransformerElm.java:	String dump() {
+DCMotorElm.java:    String dump() {
+DarlingtonElm.java:    public String dump() {
+DataInputElm.java:	String dump() {
+DataRecorderElm.java:	String dump() { 
+DelayBufferElm.java:	String dump() {
+DiacElm.java:    String dump() {
+ExtVoltageElm.java:        String dump() { return super.dump() + " " + CustomLogicModel.escape(name); }
+FMElm.java:    String dump() {
+InvertingSchmittElm.java:	String dump() {
+LDRElm.java:    String dump() { 
+LEDElm.java:	String dump() {
+MonostableElm.java:	String dump(){
+OpAmpRealElm.java:    public String dump() {
+PisoShiftElm.java:	String dump() {
+RelayCoilElm.java:    String dump() {
+RelayContactElm.java:    String dump() {
+SRAMElm.java:	String dump() {
+ScopeElm.java:    public String dump() {
+ScopeElm.java:	String dumpStr = super.dump();
+SeqGenElm.java:	String dump(){
+SipoShiftElm.java:	String dump() {
+StopTriggerElm.java:	String dump() { return super.dump() + " " + triggerVoltage + " " + type + " " + delay; }
+TestPointElm.java:    String dump() {
+ThermistorNTCElm.java:    String dump() { 
+ThreePhaseMotorElm.java:    String dump() {
+TimeDelayRelayElm.java:	String dump() {
+TransformerElm.java:	String dump() {
+TransistorElm.java:	    String dumpModel() {
+TriacElm.java:    String dump() {
+TriodeElm.java:    String dump() {
+UnijunctionElm.java:	public String dump() {
+VCCSElm.java:	String dump() {
+VarRailElm.java:	String dump() {
+WattmeterElm.java:    String dump() { return super.dump() + " " + width; }
+OptocouplerElm.java:    public String dump() { (dumpwithmask)
