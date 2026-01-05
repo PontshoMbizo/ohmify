@@ -1,26 +1,25 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import Simulator from "./Simulator";
-import Navbar from "./Navbar";
-import { db } from "@/lib/firebase"; // Your firebase lib
+import Simulator from "@/components/Simulator";
+import Navbar from "@/components/Navbar";
+import {GeneralUtils} from "@/lib/GeneralUtils";
+import { db } from "@/lib/firebase"; 
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 
+const PROBLEM_TYPES = GeneralUtils.PROBLEM_TYPES;
+
 export default function CreateProblem() {
-  const [activeSection, setActiveSection] = useState(1);
   const [isPublishing, setIsPublishing] = useState(false);
   
-  // State structured to match your Firestore schema
   const [problem, setProblem] = useState({
     title: "",
     description: "",
-    difficulty: "Medium",
-    topic: ["Circuit Analysis"],
+    difficulty: "Easy",
+    topic: [], 
     sampleCount: 30720,
-    inputs: ["", ""],
-    outputs: ["", ""],
     templateCircuit: "", 
-    solutionData: null,    // Maps to solutionWaveform (Output)
+    solutionData: null,
   });
 
   useEffect(() => {
@@ -29,16 +28,31 @@ export default function CreateProblem() {
   }, []);
 
   const scrollToSection = (index) => {
-    setActiveSection(index);
     const element = document.getElementById(`section-${index}`);
     if (element) element.scrollIntoView({ behavior: "smooth" });
   };
 
+  const toggleTopic = (type) => {
+    setProblem(prev => {
+      if (prev.topic.includes(type)) {
+        return { ...prev, topic: prev.topic.filter(t => t !== type) };
+      }
+      if (prev.topic.length < 2) {
+        return { ...prev, topic: [...prev.topic, type] };
+      }
+      return prev;
+    });
+  };
+
   /* -------------------- FIREBASE LOGIC -------------------- */
   const finalizeProblem = async () => {
-    // Check for both template and the two waveform components
     if (!problem.templateCircuit || !problem.solutionData || !problem.title) {
       alert("Please ensure Title is set, Template is saved (Sec 3), and Solution is sampled (Sec 4).");
+      return;
+    }
+
+    if (problem.topic.length === 0) {
+      alert("Please select at least one problem type.");
       return;
     }
 
@@ -51,20 +65,17 @@ export default function CreateProblem() {
         description: problem.description,
         difficulty: problem.difficulty,
         initialCircuit: problem.templateCircuit,
-        solutionWaveform: problem.solutionData, // The captured gold standard string (Output)
+        solutionWaveform: problem.solutionData, // This will be raw text (analog) or JSON (digital)
         topic: problem.topic,
-        examples: [
-          { input: problem.inputs[0], output: problem.outputs[0] },
-          { input: problem.inputs[1], output: problem.outputs[1] }
-        ],
+        isDigital: GeneralUtils.isDigitalProblem(problem.topic),
         createdAt: serverTimestamp()
       };
-      console.log(problem)
-      const docRef = await addDoc(collection(db, "problems"), problemDoc);
+
+      await addDoc(collection(db, "problems"), problemDoc);
       alert(`🚀 Problem "${problem.title}" published successfully!`);
     } catch (error) {
       console.error("Firestore Error:", error);
-      alert("Error publishing to Firebase. Check console.");
+      alert("Error publishing to Firebase.");
     } finally {
       setIsPublishing(false);
     }
@@ -76,17 +87,29 @@ export default function CreateProblem() {
     setProblem(prev => ({ ...prev, templateCircuit: sim.exportCircuit() }));
   };
 
-  /**
-   * MODIFIED: Captures the multi-node data from the Simulator.
-   * capturedData.data is { input: [...], output: [...] }
-   */
-  const captureSolution = (capturedData) => {
-    const vout = capturedData.data.output;
+const captureSolution = (capturedData) => {
+    // If captureDigital was used, capturedData.type will be "digital"
+    if (capturedData.type === "digital") {
+      /**
+       * Map the table to just the decimalOutput values 
+       * and join them with newlines (\n)
+       */
+      const digitalList = capturedData.table
+        .map(row => row.decimalOutput)
+        .join("\n");
 
-    setProblem(prev => ({ 
-      ...prev, 
-      solutionData: vout.join("\n"),    // Save Output waveform
-    }));
+      setProblem(prev => ({ 
+        ...prev, 
+        solutionData: digitalList,
+      }));
+    } else {
+      // Analog mode: already stores Vout array as newline-separated text
+      const vout = capturedData.data.output;
+      setProblem(prev => ({ 
+        ...prev, 
+        solutionData: vout.join("\n"),
+      }));
+    }
   };
 
   const SECTION_HEIGHT = "h-[calc(100vh-3rem)]";
@@ -108,12 +131,12 @@ export default function CreateProblem() {
             <div className="flex gap-4">
                 <div className="flex-1">
                     <label className="label text-xs font-bold opacity-50 uppercase">Difficulty</label>
-                    <select className="select select-bordered w-full" onChange={(e) => setProblem({...problem, difficulty: e.target.value})}>
+                    <select className="select select-bordered w-full" defaultValue={problem.difficulty} onChange={(e) => setProblem({...problem, difficulty: e.target.value})}>
                         <option>Easy</option><option>Medium</option><option>Hard</option>
                     </select>
                 </div>
                 <div className="flex-1">
-                    <label className="label text-xs font-bold opacity-50 uppercase">Samples</label>
+                    <label className="label text-xs font-bold opacity-50 uppercase">Samples / Cycles</label>
                     <input type="number" className="input input-bordered w-full" placeholder={problem.sampleCount} onChange={(e) => setProblem({...problem, sampleCount: e.target.value})} />
                 </div>
             </div>
@@ -121,22 +144,42 @@ export default function CreateProblem() {
           <button onClick={() => scrollToSection(2)} className="absolute bottom-12 right-12 btn btn-primary btn-lg rounded-full px-10 shadow-xl">Next</button>
         </section>
 
-        {/* Section 2: Examples */}
+        {/* Section 2: Problem Type Selection */}
         <section id="section-2" className={`relative flex ${SECTION_HEIGHT} w-full flex-col items-center justify-center bg-base-100 shrink-0 px-6`}>
           <button onClick={() => scrollToSection(1)} className="absolute top-8 left-12 btn btn-ghost p-2 opacity-50 hover:opacity-100 transition-opacity">
             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m12 8-4 4 4 4"/><path d="M16 12H8"/></svg>
           </button>
+          
           <div className="flex w-full max-w-6xl items-center justify-center gap-12">
-            <div className="flex flex-1 flex-col gap-3">
-              <h2 className="text-3xl font-black text-blue-600 mb-2 uppercase tracking-tighter">02. Test Cases</h2>
-              <div className="grid grid-cols-2 gap-3">
-                <input type="text" placeholder="In 1" className="input input-bordered" onChange={(e) => { let i = [...problem.inputs]; i[0] = e.target.value; setProblem({...problem, inputs: i}) }} />
-                <input type="text" placeholder="Out 1" className="input input-bordered" onChange={(e) => { let o = [...problem.outputs]; o[0] = e.target.value; setProblem({...problem, outputs: o}) }} />
-                <input type="text" placeholder="In 2" className="input input-bordered" onChange={(e) => { let i = [...problem.inputs]; i[1] = e.target.value; setProblem({...problem, inputs: i}) }} />
-                <input type="text" placeholder="Out 2" className="input input-bordered" onChange={(e) => { let o = [...problem.outputs]; o[1] = e.target.value; setProblem({...problem, outputs: o}) }} />
+            <div className="flex flex-1 flex-col gap-6">
+              <div>
+                <h2 className="text-3xl font-black text-blue-600 mb-1 uppercase tracking-tighter">02. Problem Type</h2>
+                <p className="text-sm opacity-60">Digital types trigger bit-vector bus discovery.</p>
+              </div>
+
+              <div className="flex flex-wrap gap-2 max-w-xl">
+                {PROBLEM_TYPES.map((type) => {
+                  const isSelected = problem.topic.includes(type);
+                  return (
+                    <button
+                      key={type}
+                      onClick={() => toggleTopic(type)}
+                      className={`px-4 py-2 rounded-full text-sm font-semibold transition-all border ${
+                        isSelected 
+                        ? "bg-blue-600 text-white border-blue-600 shadow-md" 
+                        : "bg-white text-gray-600 border-gray-300 hover:border-blue-400"
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  );
+                })}
               </div>
             </div>
-            <img src="exampleProblem.png" alt="Example" className="h-96 w-auto rounded-xl shadow-2xl border bg-white" />
+
+            <div className="h-96 w-80 rounded-xl border bg-base-200 flex items-center justify-center p-8 text-center">
+                <p className="text-xs opacity-50">Circuit preview or documentation placeholder</p>
+            </div>
           </div>
           <button onClick={() => scrollToSection(3)} className="absolute bottom-12 right-12 btn btn-primary btn-lg rounded-full px-10 shadow-xl">Next</button>
         </section>
@@ -146,13 +189,14 @@ export default function CreateProblem() {
           <div className="w-[70%] h-full">
             <Simulator mode="export" onSubmit={captureTemplate} />
           </div>
-          <div className="w-[30%] h-full p-10 flex flex-col gap-6 bg-base-50">
+          <div className="w-[30%] h-full p-10 flex flex-col gap-6 bg-base-50 border-l">
             <button onClick={() => scrollToSection(2)} className="btn btn-ghost p-0 w-fit opacity-50 hover:opacity-100">
               <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m12 8-4 4 4 4"/><path d="M16 12H8"/></svg>
             </button>
             <h2 className="text-2xl font-black text-blue-600 uppercase tracking-tighter">03. Template</h2>
+            <p className="text-sm opacity-70">Design the starting state for the student here.</p>
             <div className={`p-6 rounded-2xl border-2 transition-all ${problem.templateCircuit ? "bg-green-50 border-green-500 text-green-700" : "bg-white border-dashed border-gray-300"}`}>
-               <p className="text-sm font-bold">{problem.templateCircuit ? "✅ Template Exported" : "⏳ Click 'Submit' to export circuit"}</p>
+                <p className="text-sm font-bold">{problem.templateCircuit ? "✅ Template Exported" : "⏳ Click 'Submit' to capture circuit"}</p>
             </div>
             <button onClick={() => scrollToSection(4)} className="absolute bottom-12 right-12 btn bg-blue-600 text-white btn-lg rounded-full px-10 shadow-xl">Next</button>
           </div>
@@ -161,26 +205,31 @@ export default function CreateProblem() {
         {/* Section 4: Solution */}
         <section id="section-4" className={`relative flex ${SECTION_HEIGHT} w-full shrink-0 bg-white`}>
           <div className="w-[70%] h-full">
-            {/* Simulator is configured to capture both 'input' and 'output' nodes */}
-            <Simulator
+            <Simulator 
+              nodes={["input", "output"]}
               circuit={problem.templateCircuit} 
               onSubmit={captureSolution} 
-            />
+              timestep={GeneralUtils.getTimestepForProblem(problem)}
+              isDigital={GeneralUtils.isDigitalProblem(problem)}
+             />
           </div>
-          <div className="w-[30%] h-full p-10 flex flex-col gap-6 bg-base-50">
+          <div className="w-[30%] h-full p-10 flex flex-col gap-6 bg-base-50 border-l">
             <button onClick={() => scrollToSection(3)} className="btn btn-ghost p-0 w-fit opacity-50 hover:opacity-100">
               <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m12 8-4 4 4 4"/><path d="M16 12H8"/></svg>
             </button>
-            <h2 className="text-2xl font-black text-blue-600 uppercase tracking-tighter">04. Solution</h2>
+            <h2 className="text-2xl font-black text-blue-600 uppercase tracking-tighter">04. Gold Standard</h2>
+            <p className="text-sm opacity-70">
+                {isDigitalProblem() 
+                  ? "Ensure 'clk' and 'Output' labels exist." 
+                  : "Ensure 'input' and 'output' labels exist."}
+            </p>
             <div className={`p-6 rounded-2xl border-2 transition-all ${problem.solutionData ? "bg-green-50 border-green-500 text-green-700" : "bg-white border-dashed border-gray-300"}`}>
-               <p className="text-sm font-bold">{problem.solutionData ? "✅ Waveforms Recorded" : "⏳ Awaiting sampling..."}</p>
+                <p className="text-sm font-bold">
+                    {problem.solutionData ? "✅ Solution Captured" : "⏳ Awaiting sampling..."}
+                </p>
             </div>
-            <button 
-              disabled={isPublishing}
-              onClick={finalizeProblem}
-              className="mt-auto btn btn-success btn-lg rounded-2xl text-white font-black uppercase shadow-2xl disabled:bg-gray-400"
-            >
-                {isPublishing ? "Publishing..." : "Publish"}
+            <button disabled={isPublishing} onClick={finalizeProblem} className="mt-auto btn bg-blue-600 btn-lg rounded-2xl text-white font-black uppercase shadow-2xl disabled:bg-gray-400">
+                {isPublishing ? "Publishing..." : "Finalize & Publish"}
             </button>
           </div>
         </section>

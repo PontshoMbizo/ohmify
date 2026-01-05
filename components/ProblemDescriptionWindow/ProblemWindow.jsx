@@ -1,7 +1,7 @@
 import React, { useLayoutEffect } from 'react';
-import ProblemDescription from "./ProblemDescription";
-import ProblemEditorial from "./ProblemEditorial";
-import ProblemSolutions from "@/components/ProblemSolutions";
+import ProblemDescription from "@/components/ProblemDescriptionWindow/ProblemDescription";
+import Editorial from "@/components/ProblemDescriptionWindow/Editorial";
+import SampleSolution from '@/components/ProblemDescriptionWindow/SampleSolution';
 
 export default function ProblemWindow({problem}) { 
 
@@ -37,7 +37,7 @@ export default function ProblemWindow({problem}) {
             Editorial
         </label>
         <div className="tab-content bg-base-100 border-base-300 p-6">
-            <ProblemEditorial problem={problem}/>
+            <Editorial problem={problem}/>
         </div>
 
         {/* Tab 3: */}
@@ -46,7 +46,7 @@ export default function ProblemWindow({problem}) {
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-circle-check-big-icon lucide-circle-check-big size-4 me-2"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>
             Solutions
         </label>
-        <div className="tab-content bg-base-100 border-base-300 p-6"><ProblemSolutions problem={problem}/></div>
+        <div className="tab-content bg-base-100 border-base-300 p-6"><SampleSolution problem={problem}/></div>
         </div>
 
 

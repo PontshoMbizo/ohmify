@@ -18,8 +18,13 @@
 - Power Electronics and wave-shaping
     - compare the time domain waveforms using standard deviation
     DONE
+    - note to self, only change the sample time when you are sampling, it hinders the simulation process...   
 
 - Frequency Domain Problems (Audio, Controls...)
 
-- Digital Electronics
-    - come back later
+- Digital Systems/Electronics
+    - sample an array of input [I0, I1, ..., In], an array of outputs [O0, O1, ..., On] based on a universal clock [clk] used for synchronization
+    - create a table from the sampled data that'll be used as the golden standard:
+    |input->cat(I0, I1, ..., In)|output->cat(O0, O1, ..., On)| 
+    - from this table, plot a logic analyzer graph with the logic levels on the y-axis and the clock pulse count on the x-axis (time)
+

@@ -1,4 +1,4 @@
-import CreateProblem from "@/components/CreateProblem";
+import CreateProblem from "@/components/CreateProblemWindow/CreateProblem";
 
 export default function create() { return (
     <CreateProblem />

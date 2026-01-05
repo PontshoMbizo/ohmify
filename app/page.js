@@ -1,8 +1,17 @@
-import ComingSoon from "./building/page";
+"use client";
+import Navbar from "@/components/Navbar";
+import Hero from "@/components/LandingPage/Hero";
+import Body from "@/components/LandingPage/Body";
+import Footer from "@/components/LandingPage/Footer";
+import React from "react";
 
-export default function Home() {
+export default function LandingPage() {
   return (
-    <ComingSoon/>
+    <div className="min-h-screen w-full bg-white font-sans text-gray-800">
+      <Navbar />
+      <Hero />
+      <Body />
+      <Footer />
+    </div>
   );
 }
-

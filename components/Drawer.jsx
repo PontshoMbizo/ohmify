@@ -20,18 +20,6 @@ export default function Drawer() { return(
       <li className="pb-4"><a href="/building"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-notebook-pen-icon lucide-notebook-pen"><path d="M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4"/><path d="M2 6h4"/><path d="M2 10h4"/><path d="M2 14h4"/><path d="M2 18h4"/><path d="M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z"/></svg>
         Study Plan</a></li>
 
-  {/* <div tabIndex={0} className="collapse collapse-arrow text-gray-800 border-base-300 border">
-    <div className="collapse-title font-semibold ps-2 pr-10">My Problems</div>
-    <div className="collapse-content text-sm">
-      <ul>
-        <li><a>Problem 1</a></li>
-        <li><a>Problem 2</a></li>
-        <li><a>Problem 3</a></li>
-        <li><a>Problem 4</a></li>
-      </ul>
-    </div>
-  </div> */}
-
   <div tabIndex={0} className="collapse collapse-arrow bg-base-100 border-base-300 border">
   <div className="flex collapse-title font-semibold after:start-5 after:end-auto pe-1 ps-12">My Problems<a href = "/create">
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="size-5 inline-block absolute ms-8">

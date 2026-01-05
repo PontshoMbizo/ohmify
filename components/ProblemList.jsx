@@ -2,19 +2,24 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import LoadingAnimation from "./LoadingAnimation";
+import { GeneralUtils } from "@/lib/GeneralUtils";
 import { db } from "@/lib/firebase";
 import { collection, getDocs } from "firebase/firestore";
-import LoadingAnimation from "./LoadingAnimation";
 
 export default function ProblemList() {
 
   const [problems, setProblems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
 
-  const topics = ["All", "Digital Logic", "DSP", "Control Systems", "Computer Architecture"];
+  // Updated to match the types defined in CreateProblem.jsx
+const topics = [
+  "All", ...GeneralUtils.PROBLEM_TYPES
+];
+  
   const [selectedTopic, setSelectedTopic] = useState("All");
 
-  // Fetch problems once on load
   useEffect(() => {
     const fetchProblems = async () => {
       const snap = await getDocs(collection(db, "problems"));
@@ -25,54 +30,84 @@ export default function ProblemList() {
     fetchProblems();
   }, []);
 
+  // UPDATED FILTER LOGIC:
+  // p.topic is now an array. We check if that array includes the selectedTopic string.
   const filtered = selectedTopic === "All"
     ? problems
-    : problems.filter(p => p.topic === selectedTopic);
+    : problems.filter(p => Array.isArray(p.topic) && p.topic.includes(selectedTopic));
 
   const diffColor = (difficulty) => ({
-    Easy:  "text-green-500",
-    Medium:"text-yellow-500",
-    Hard:  "text-red-500"
+    Easy:   "text-green-500",
+    Medium: "text-yellow-500",
+    Hard:   "text-red-500"
   }[difficulty] || "text-gray-400");
+
   if (loading) return <LoadingAnimation />;
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-4">
 
       {/* FILTER BAR — LeetCode Style */}
-      <div className="flex gap-3 overflow-x-auto p-2 mt-2">
-        {topics.map(topic => (
-          <button
-            key={topic}
-            onClick={() => setSelectedTopic(topic)}
-            className={`px-5 py-2 rounded-full border font-medium transition-all
-              ${selectedTopic === topic 
-                ? "bg-black text-white" 
-                : "bg-gray-100 hover:bg-gray-200 text-gray-700"}`}
-          >
-            {topic}
-          </button>
-        ))}
-      </div>
-
-      {/* PROBLEM LIST */}
-      <ul className="menu bg-base-100 rounded-box">
-        {filtered.map((p) => (
-          <li key={p.id}>
-            <label className="flex items-center gap-4 py-3">
-
-              <Link className="flex-1" href={`/problem/${p.id}`}>
-                {p.title}
-              </Link>
-
-              <span className="text-sm opacity-70 w-20">{p.rate}</span>
-
-              <span className={`${diffColor(p.difficulty)} font-medium w-14 text-right`}>
-                {p.difficulty}
+      <div className="flex mt-4">
+    <div className={`flex flex-wrap items-center gap-2 p-1 transition-all duration-300 overflow-hidden mt-4 ${isExpanded ? "h-auto" : "h-8"}`}>
+          {topics.map(topic => (
+            <div key={topic} className="flex items-center">
+              <button
+                onClick={() => setSelectedTopic(topic)}
+                className={`rounded-full px-3 py-1 text-sm font-medium transition-all whitespace-nowrap
+                  ${selectedTopic === topic 
+                    ? "bg-green-600 text-white" 
+                    : "text-gray-500 hover:bg-gray-100"}`}
+              >
+                {topic}
+              </button>
+              {/* Optional: Counter badge as seen in your image */}
+              <span className="ml-1 px-1.5 py-0.5 rounded-full bg-gray-100 text-[10px] text-gray-400">
+                {topic === "All" ? problems.length : problems.filter(p => p.topic?.includes(topic)).length}
               </span>
-            </label>
-          </li>
-        ))}
+            </div>
+          ))}
+        </div>
+                    {/* Expand/Collapse Trigger */}
+          <button 
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="absolute right-16 flex items-center z-[20] text-xs text-gray-400 hover:text-gray-600 font-medium transition-colors"
+          >
+            {isExpanded ? 'Collapse' : 'Expand'}
+            <svg 
+              className={`w-3 h-3 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} 
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          </div>
+      {/* PROBLEM LIST */}
+      <ul className="menu bg-base-100 rounded-box w-[70%]">
+        {filtered.length > 0 ? (
+          filtered.map((p) => (
+            <li key={p.id} className="border-b border-base-200 last:border-none">
+              <label className="flex items-center gap-4 py-3 hover:bg-base-200 transition-colors">
+                <Link className="flex-1 font-semibold px-4" href={`/problem/${p.id}`}>
+                  {p.title}
+                </Link>
+
+                {/* Display primary topic tag (optional UI hint) */}
+                <span className="hidden md:inline text-xs px-2 py-1 rounded opacity-60">
+                  {Array.isArray(p.topic) ? p.topic[0] : p.topic}
+                </span>
+
+                <span className={`${diffColor(p.difficulty)} font-medium w-20 text-right`}>
+                  {p.difficulty}
+                </span>
+              </label>
+            </li>
+          ))
+        ) : (
+          <div className="p-10 text-center opacity-50 italic">
+            No problems found for this category.
+          </div>
+        )}
       </ul>
     </div>
   );

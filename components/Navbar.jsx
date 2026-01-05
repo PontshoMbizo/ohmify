@@ -32,27 +32,17 @@ export default function Navbar({color, home}) {
 
         <a href = "/" className={` flex font-bold items-center ml-2 ${color ? `text-white` : `text-black`}`}>
           <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#0d7406" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-omega-icon lucide-omega mx-2"><path d="M3 20h4.5a.5.5 0 0 0 .5-.5v-.282a.52.52 0 0 0-.247-.437 8 8 0 1 1 8.494-.001.52.52 0 0 0-.247.438v.282a.5.5 0 0 0 .5.5H21"/></svg>
-          <span className="text-[1.7em] font-bold tracking-wide">Ohmify</span>
+          <span className="text-[1.7em] font-bold tracking-wide font-jersey">Ohmify</span>
         </a>
       </div>
 
       {/* CENTER MENU (visible only on large screens) */}
       <div className="navbar-center hidden lg:flex">
         <ul className="menu menu-horizontal px-1">
-          <li><a href="/problem">Problems</a></li>
-          <li><a href="/building">Contest</a></li>
-          <li><a href="/building">Discuss</a></li>
-          <li>
-            <details>
-              <summary>Interview</summary>
-              <ul className="p-2 bg-base-100 rounded-box w-40 shadow z-[1]">
-                <li><a href="/building"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="gray" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-router-icon lucide-router"><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6.01 18H6"/><path d="M10.01 18H10"/><path d="M15 10v4"/><path d="M17.84 7.17a4 4 0 0 0-5.66 0"/><path d="M20.66 4.34a8 8 0 0 0-11.31 0"/></svg>
-                     online</a></li>
-                <li><a href="/building"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="gray" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-chart-network-icon lucide-chart-network"><path d="m13.11 7.664 1.78 2.672"/><path d="m14.162 12.788-3.324 1.424"/><path d="m20 4-6.06 1.515"/><path d="M3 3v16a2 2 0 0 0 2 2h16"/><circle cx="12" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="9" cy="15" r="2"/></svg>
-                    assessment</a></li>
-              </ul>
-            </details>
-          </li>
+          <li><a className="hover:text-green-500 hover:bg-white" href="/problem">Problems</a></li>
+          <li><a className="hover:text-green-500 hover:bg-white" href="/ComingSoon">Explore</a></li>
+          <li><a className="hover:text-green-500 hover:bg-white" href="/ComingSoon">Contest</a></li>
+          <li><a className="hover:text-green-500 hover:bg-white" href="/ComingSoon">Discuss</a></li>
         </ul>
       </div>
 
@@ -124,6 +114,8 @@ export default function Navbar({color, home}) {
             <li><a>Logout</a></li>
           </ul>
         </div>
+
+        <button className="btn btn-xs btn-outline btn-warning">Sign in</button>
 
       </div>
     </div>
