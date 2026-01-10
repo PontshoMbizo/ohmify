@@ -1,7 +1,7 @@
 export default function Navbar({color, home}) {
   return (
         <div
-      className="navbar min-h-12 h-12 shadow-sm text-gray-500 bg-base-100"
+      className="navbar min-h-12 h-12 shadow-xs text-gray-500 bg-base-100"
     >
 
       {/* LEFT SECTION (brand + mobile menu) */}

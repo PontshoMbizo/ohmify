@@ -5,27 +5,34 @@ import { useEffect, useState } from "react";
 import LoadingAnimation from "./LoadingAnimation";
 import { GeneralUtils } from "@/lib/GeneralUtils";
 import { db } from "@/lib/firebase";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, query, orderBy } from "firebase/firestore";
 
 export default function ProblemList() {
 
   const [problems, setProblems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [selectedTopic, setSelectedTopic] = useState("All");
 
   // Updated to match the types defined in CreateProblem.jsx
-const topics = [
+const tags = [
   "All", ...GeneralUtils.PROBLEM_TYPES
 ];
   
-  const [selectedTopic, setSelectedTopic] = useState("All");
 
   useEffect(() => {
     const fetchProblems = async () => {
-      const snap = await getDocs(collection(db, "problems"));
-      const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setProblems(list);
-      setLoading(false);
+      try {
+        // Changed collection name to "Problems" to match your new schema
+        const q = query(collection(db, "Problems"), orderBy("createdAt", "desc"));
+        const snap = await getDocs(q);
+        const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setProblems(list);
+      } catch (error) {
+        console.error("Error fetching problems:", error);
+      } finally {
+        setLoading(false);
+      }
     };
     fetchProblems();
   }, []);
@@ -34,8 +41,9 @@ const topics = [
   // p.topic is now an array. We check if that array includes the selectedTopic string.
   const filtered = selectedTopic === "All"
     ? problems
-    : problems.filter(p => Array.isArray(p.topic) && p.topic.includes(selectedTopic));
+    : problems.filter(p => Array.isArray(p.topics) && p.topics.includes(selectedTopic));
 
+    console.log(problems);
   const diffColor = (difficulty) => ({
     Easy:   "text-green-500",
     Medium: "text-yellow-500",
@@ -50,20 +58,20 @@ const topics = [
       {/* FILTER BAR — LeetCode Style */}
       <div className="flex mt-4">
     <div className={`flex flex-wrap items-center gap-2 p-1 transition-all duration-300 overflow-hidden mt-4 ${isExpanded ? "h-auto" : "h-8"}`}>
-          {topics.map(topic => (
-            <div key={topic} className="flex items-center">
+          {tags.map(tag => (
+            <div key={tag} className="flex items-center">
               <button
-                onClick={() => setSelectedTopic(topic)}
+                onClick={() => setSelectedTopic(tag)}
                 className={`rounded-full px-3 py-1 text-sm font-medium transition-all whitespace-nowrap
-                  ${selectedTopic === topic 
+                  ${selectedTopic === tag 
                     ? "bg-green-600 text-white" 
                     : "text-gray-500 hover:bg-gray-100"}`}
               >
-                {topic}
+                {tag}
               </button>
               {/* Optional: Counter badge as seen in your image */}
               <span className="ml-1 px-1.5 py-0.5 rounded-full bg-gray-100 text-[10px] text-gray-400">
-                {topic === "All" ? problems.length : problems.filter(p => p.topic?.includes(topic)).length}
+                {tag === "All" ? problems.length : problems.filter(p => p.topics?.includes(tag)).length}
               </span>
             </div>
           ))}

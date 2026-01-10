@@ -18,7 +18,7 @@ export default function AutoMarker({ onBack, solution, capturedData, topics = ["
   useEffect(() => {
     setChartData(null);
   }, [capturedData]);
-
+  console.log("capturedData:", capturedData);
   const extractDataPoints = useCallback((text) => {
     if (!text) return [];
     return text.trim().split("\n")
@@ -41,6 +41,7 @@ export default function AutoMarker({ onBack, solution, capturedData, topics = ["
             decimalOutput: parseInt(val.trim(), 10)
           }));
 
+          console.log("in process digital:");
         const grade = gradingUtils.gradeDigital(userTable, goldenTable);
         const verdict = gradingUtils.getVerdict(grade.matchRatio, topics, true);
 
@@ -66,8 +67,8 @@ export default function AutoMarker({ onBack, solution, capturedData, topics = ["
 
     setTimeout(() => {
       const solOutData = extractDataPoints(solution || "");
-      const rmse = gradingUtils.calculateRMSE(userVout, solOutData);
-      const verdict = gradingUtils.getVerdict(rmse, topics, false);
+      const nrmse = gradingUtils.calculateNormalizedRMSE(userVout, solOutData);
+      const verdict = gradingUtils.getVerdict(nrmse, topics, false);
 
       const targetBode = signalUtils.getFrequencyData(userVin, solOutData, sampleRate);
       const userBode = signalUtils.getFrequencyData(userVin, userVout, sampleRate);
@@ -77,7 +78,7 @@ export default function AutoMarker({ onBack, solution, capturedData, topics = ["
         timeLabels,
         userData: userVout,
         solutionData: solOutData,
-        verdict: { ...verdict, rmse },
+        verdict: { ...verdict, nrmse },
         freqLabels: targetBode.freq, 
         userSpectrum: userBode.outputSpectrum,
         solutionSpectrum: targetBode.outputSpectrum,
@@ -118,7 +119,7 @@ export default function AutoMarker({ onBack, solution, capturedData, topics = ["
         <div className="flex flex-col items-center justify-center py-20 gap-2">
           <LoadingAnimation />
           <p className="text-sm opacity-60 mt-6 animate-pulse uppercase font-semibold tracking-wider">
-            {capturedData?.type === "digital" ? "Verifying Bit Vectors..." : "Calculating FFT & RMSE..."}
+            {capturedData?.type === "digital" ? "Verifying Bit Vectors..." : "Calculating FFT & NRMSE..."}
           </p>
         </div>
       ) : chartData ? (

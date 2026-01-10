@@ -3,9 +3,9 @@
 import React, { useState, useEffect } from "react";
 import Simulator from "@/components/Simulator";
 import Navbar from "@/components/Navbar";
-import {GeneralUtils} from "@/lib/GeneralUtils";
+import { GeneralUtils } from "@/lib/GeneralUtils";
 import { db } from "@/lib/firebase"; 
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, doc, setDoc, serverTimestamp } from "firebase/firestore";
 
 const PROBLEM_TYPES = GeneralUtils.PROBLEM_TYPES;
 
@@ -16,7 +16,7 @@ export default function CreateProblem() {
     title: "",
     description: "",
     difficulty: "Easy",
-    topic: [], 
+    topics: [], 
     sampleCount: 30720,
     templateCircuit: "", 
     solutionData: null,
@@ -34,24 +34,28 @@ export default function CreateProblem() {
 
   const toggleTopic = (type) => {
     setProblem(prev => {
-      if (prev.topic.includes(type)) {
-        return { ...prev, topic: prev.topic.filter(t => t !== type) };
+      if (prev.topics.includes(type)) {
+        return { ...prev, topics: prev.topics.filter(t => t !== type) };
       }
-      if (prev.topic.length < 2) {
-        return { ...prev, topic: [...prev.topic, type] };
+      if (prev.topics.length < 2) {
+        return { ...prev, topics: [...prev.topics, type] };
       }
       return prev;
     });
   };
 
-  /* -------------------- FIREBASE LOGIC -------------------- */
+  /* -------------------- UPDATED FIREBASE LOGIC -------------------- */
   const finalizeProblem = async () => {
+
+    console.log("Finalizing Problem:", problem);
     if (!problem.templateCircuit || !problem.solutionData || !problem.title) {
       alert("Please ensure Title is set, Template is saved (Sec 3), and Solution is sampled (Sec 4).");
       return;
     }
 
-    if (problem.topic.length === 0) {
+
+
+    if (problem.topics.length === 0) {
       alert("Please select at least one problem type.");
       return;
     }
@@ -59,23 +63,39 @@ export default function CreateProblem() {
     setIsPublishing(true);
 
     try {
-      const problemDoc = {
+      // 1. Create the Main Metadata Document in "Problems"
+      const mainDocData = {
         title: problem.title,
-        creator: "Admin",
+        creatorName: "Admin", // Placeholder for auth.currentUser.displayName
+        creatorId: "admin-uid", // Placeholder for auth.currentUser.uid
         description: problem.description,
         difficulty: problem.difficulty,
-        initialCircuit: problem.templateCircuit,
-        solutionWaveform: problem.solutionData, // This will be raw text (analog) or JSON (digital)
-        topic: problem.topic,
-        isDigital: GeneralUtils.isDigitalProblem(problem.topic),
+        topics: problem.topics,
+        isDigital: GeneralUtils.isDigitalProblem(problem.topics),
         createdAt: serverTimestamp()
       };
 
-      await addDoc(collection(db, "problems"), problemDoc);
-      alert(`🚀 Problem "${problem.title}" published successfully!`);
+      const problemRef = await addDoc(collection(db, "Problems"), mainDocData);
+
+      // 2. Write Initial Circuit to sub-collection: Problems/{id}/initialCircuit/data
+      await setDoc(doc(db, "Problems", problemRef.id, "initialCircuit", "data"), {
+        version: 1,
+        payload: problem.templateCircuit
+      });
+
+      // 3. Write Solution Waveform to sub-collection: Problems/{id}/solutionWaveform/data
+      // Note: solutionData is already a newline-separated string from captureSolution()
+      await setDoc(doc(db, "Problems", problemRef.id, "solutionWaveform", "data"), {
+        sampleRate: 1 / GeneralUtils.getTimestepForProblem(problem),
+        samples: problem.solutionData
+      });
+
+      alert(`🚀 Problem "${problem.title}" published successfully to the updated schema!`);
+      
+      // Reset local state if needed or redirect
     } catch (error) {
       console.error("Firestore Error:", error);
-      alert("Error publishing to Firebase.");
+      alert("Error publishing to the new database structure.");
     } finally {
       setIsPublishing(false);
     }
@@ -87,13 +107,8 @@ export default function CreateProblem() {
     setProblem(prev => ({ ...prev, templateCircuit: sim.exportCircuit() }));
   };
 
-const captureSolution = (capturedData) => {
-    // If captureDigital was used, capturedData.type will be "digital"
+  const captureSolution = (capturedData) => {
     if (capturedData.type === "digital") {
-      /**
-       * Map the table to just the decimalOutput values 
-       * and join them with newlines (\n)
-       */
       const digitalList = capturedData.table
         .map(row => row.decimalOutput)
         .join("\n");
@@ -103,7 +118,6 @@ const captureSolution = (capturedData) => {
         solutionData: digitalList,
       }));
     } else {
-      // Analog mode: already stores Vout array as newline-separated text
       const vout = capturedData.data.output;
       setProblem(prev => ({ 
         ...prev, 
@@ -159,7 +173,7 @@ const captureSolution = (capturedData) => {
 
               <div className="flex flex-wrap gap-2 max-w-xl">
                 {PROBLEM_TYPES.map((type) => {
-                  const isSelected = problem.topic.includes(type);
+                  const isSelected = problem.topics.includes(type);
                   return (
                     <button
                       key={type}
@@ -177,9 +191,9 @@ const captureSolution = (capturedData) => {
               </div>
             </div>
 
-            <div className="h-96 w-80 rounded-xl border bg-base-200 flex items-center justify-center p-8 text-center">
-                <p className="text-xs opacity-50">Circuit preview or documentation placeholder</p>
-            </div>
+
+
+          <img className="h-96 w-auto border-2 border-gray-300 rounded-xl" src="exampleProblem.png" alt="problem example" />
           </div>
           <button onClick={() => scrollToSection(3)} className="absolute bottom-12 right-12 btn btn-primary btn-lg rounded-full px-10 shadow-xl">Next</button>
         </section>
@@ -210,7 +224,7 @@ const captureSolution = (capturedData) => {
               circuit={problem.templateCircuit} 
               onSubmit={captureSolution} 
               timestep={GeneralUtils.getTimestepForProblem(problem)}
-              isDigital={GeneralUtils.isDigitalProblem(problem)}
+              isDigital={GeneralUtils.isDigitalProblem(problem.topics)}
              />
           </div>
           <div className="w-[30%] h-full p-10 flex flex-col gap-6 bg-base-50 border-l">
@@ -219,7 +233,7 @@ const captureSolution = (capturedData) => {
             </button>
             <h2 className="text-2xl font-black text-blue-600 uppercase tracking-tighter">04. Gold Standard</h2>
             <p className="text-sm opacity-70">
-                {isDigitalProblem() 
+                {GeneralUtils.isDigitalProblem(problem.topics) 
                   ? "Ensure 'clk' and 'Output' labels exist." 
                   : "Ensure 'input' and 'output' labels exist."}
             </p>

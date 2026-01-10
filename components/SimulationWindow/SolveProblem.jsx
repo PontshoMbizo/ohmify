@@ -26,8 +26,6 @@ export default function SolveProblem({ circuit, solution, timestep, topics = [] 
         />
       ) : (
         <Simulator
-          // Nodes are ignored by Simulator in Digital Mode (Discovery takes over)
-          nodes={["output", "input"]} 
           circuit={circuit}
           onSubmit={handleSimSubmit}
           timestep={timestep}

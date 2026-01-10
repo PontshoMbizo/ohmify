@@ -1,3 +1,5 @@
+"use client";
+
 import Navbar from "@/components/Navbar";
 import ProblemWindow from "@/components/ProblemDescriptionWindow/ProblemWindow";
 import { useParams } from "next/navigation";
@@ -6,6 +8,7 @@ import { db } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import LoadingAnimation from "@/components/LoadingAnimation";
 import SolveProblem from "@/components/SimulationWindow/SolveProblem";
+import { GeneralUtils } from "@/lib/GeneralUtils";
 
 export default function ProblemPage() {
   const { id } = useParams();
@@ -17,15 +20,37 @@ export default function ProblemPage() {
     if (!id) return;
 
     const loadProblem = async () => {
-      const ref = doc(db, "problems", id);
-      const snap = await getDoc(ref);
+      try {
+        // 1. Fetch main metadata
+        const metaRef = doc(db, "Problems", id);
+        const metaSnap = await getDoc(metaRef);
 
-      if (snap.exists()) {
-        setProblem(snap.data());
-      } else {
+        if (metaSnap.exists()) {
+          const metaData = metaSnap.data();
+
+          // 2. Fetch "heavy" data from sub-collections in parallel
+          const [circuitSnap, solutionSnap] = await Promise.all([
+            getDoc(doc(db, "Problems", id, "initialCircuit", "data")),
+            getDoc(doc(db, "Problems", id, "solutionWaveform", "data"))
+          ]);
+
+          // 3. Assemble the full problem object
+          setProblem({
+            ...metaData,
+            id: id,
+            initialCircuit: circuitSnap.data()?.payload || "",
+            solutionWaveform: solutionSnap.data()?.samples || "",
+            sampleRate: solutionSnap.data()?.sampleRate || 0
+          });
+        } else {
+          setProblem(null);
+        }
+      } catch (error) {
+        console.error("Error loading full problem data:", error);
         setProblem(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     loadProblem();
@@ -34,21 +59,9 @@ export default function ProblemPage() {
   /**
    * Determine the simulation timestep based on the problem's categorized topics.
    */
-  const getTimestepForProblem = () => {
-    if (!problem || !problem.topic) return 5e-6; // Default fallback
+const timestep = GeneralUtils.getTimestepForProblem(problem);
 
-    // Logic synchronized with CreateProblem.jsx
-    if (problem.topic.includes("Power Electronics")) {
-      return 1e-3; // 50 microseconds
-    }
-    
-    if (problem.topic.some(t => t.includes("RF") || t.includes("Microwave"))) {
-      return 1e-9; // 1 nanosecond for high frequency
-    }
-
-    return 5e-6; // Standard 5 microseconds
-  };
-
+ console.log("Determined timestep:", timestep);
   if (loading) return <LoadingAnimation />;
   if (!problem) return <div className="p-10">Problem not found.</div>;
 
@@ -60,8 +73,8 @@ export default function ProblemPage() {
         <SolveProblem 
           circuit={problem.initialCircuit} 
           solution={problem.solutionWaveform} 
-          timestep={getTimestepForProblem()} 
-          topics={problem.topic || []}
+          timestep={timestep} 
+          topics={problem.topics || []}
         />
       </div>
     </>
