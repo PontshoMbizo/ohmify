@@ -5,7 +5,7 @@ import AutoMarker from "@/components/SimulationWindow/AutoMarker/AutoMarker.jsx"
 import {GeneralUtils} from "@/lib/GeneralUtils";
 import { useState } from "react";
 
-export default function SolveProblem({ circuit, solution, timestep, topics = [] }) {
+export default function SolveProblem({ circuit, solution, timestep, topics = [], sampleCount}) {
   const [simResults, setSimResults] = useState(null);
 
   const handleSimSubmit = (data, sim) => {
@@ -30,6 +30,7 @@ export default function SolveProblem({ circuit, solution, timestep, topics = [] 
           onSubmit={handleSimSubmit}
           timestep={timestep}
           isDigital={GeneralUtils.isDigitalProblem(topics)}
+          sampleCount={sampleCount}
         />
       )}
     </div>

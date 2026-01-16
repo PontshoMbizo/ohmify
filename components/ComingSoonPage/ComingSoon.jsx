@@ -9,9 +9,6 @@ export default function ComingSoon() {
   return (
     <>
     <div className="min-h-screen w-full bg-white overflow-hidden relative">
-
-      <Navbar/>
-
       {/* Main Content */}
       <div className="mx-auto grid max-w-7xl grid-cols-1 lg:grid-cols-2 gap-12 px-6 pt-5">
 

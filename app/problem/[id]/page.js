@@ -40,7 +40,8 @@ export default function ProblemPage() {
             id: id,
             initialCircuit: circuitSnap.data()?.payload || "",
             solutionWaveform: solutionSnap.data()?.samples || "",
-            sampleRate: solutionSnap.data()?.sampleRate || 0
+            sampleRate: solutionSnap.data()?.sampleRate || 0,
+            sampleCount: solutionSnap.data()?.sampleCount
           });
         } else {
           setProblem(null);
@@ -56,25 +57,27 @@ export default function ProblemPage() {
     loadProblem();
   }, [id]);
 
-  /**
-   * Determine the simulation timestep based on the problem's categorized topics.
-   */
-const timestep = GeneralUtils.getTimestepForProblem(problem);
-
- console.log("Determined timestep:", timestep);
   if (loading) return <LoadingAnimation />;
   if (!problem) return <div className="p-10">Problem not found.</div>;
 
+  /**
+   * Determine simulation parameters based on the fetched data
+   */
+  const timestep = GeneralUtils.getTimestepForProblem(problem);
+
+  console.log("Timestep:", timestep);
+  console.log("Sample count:", problem.sampleCount);
+
   return (
     <>
-      <Navbar />
-      <div className="h-screen w-full grid grid-cols-1 lg:grid-cols-2">
+      <div className="h-screen w-full grid grid-cols-1 lg:grid-cols-2 pt-12">
         <ProblemWindow problem={problem} />
         <SolveProblem 
           circuit={problem.initialCircuit} 
           solution={problem.solutionWaveform} 
           timestep={timestep} 
           topics={problem.topics || []}
+          sampleCount={problem.sampleCount}
         />
       </div>
     </>

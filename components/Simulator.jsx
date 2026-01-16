@@ -8,7 +8,8 @@ export default function Simulator({
   onSubmit, 
   mode = "sample", 
   isDigital = false, 
-  timestep = 5e-6 
+  timestep = 5e-6, 
+  sampleCount
 }) {
   const [fullScreen, setFullScreen] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -108,7 +109,7 @@ export default function Simulator({
          * UPDATED: Now uses Voltmeter discovery in samplingUtils.
          * We pass numSamples (30720) directly.
          */
-        capturedData = await samplingUtils.captureAnalog(sim, 30720);
+        capturedData = await samplingUtils.captureAnalog(sim, sampleCount || 30720);
       }
       
       onSubmit(capturedData, sim); 

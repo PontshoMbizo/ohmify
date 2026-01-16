@@ -7,7 +7,6 @@ import Footer from '@/components/LandingPage/Footer';
 export default function Help() {
   return (
     <>
-    <Navbar />
     <div className="max-w-5xl mx-auto p-6 space-y-16 pb-20 text-base-content">
       
       {/* --- SECTION 1: SYSTEM OVERVIEW --- */}
