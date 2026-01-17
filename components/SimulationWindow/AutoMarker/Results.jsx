@@ -23,22 +23,13 @@ export default function Results({ chartData }) {
   const { passed, score, message, nrmse } = chartData.verdict || {};
   
   const chartRef = useRef(null);
-  const phaseRef = useRef(null);
 
   useEffect(() => {
     const setup = async () => {
       const zoomPlugin = (await import("chartjs-plugin-zoom")).default;
       ChartJS.register(
-        CategoryScale, 
-        LinearScale, 
-        LogarithmicScale, 
-        PointElement, 
-        LineElement, 
-        BarElement, 
-        Title, 
-        Tooltip, 
-        Legend, 
-        zoomPlugin
+        CategoryScale, LinearScale, LogarithmicScale, PointElement, 
+        LineElement, BarElement, Title, Tooltip, Legend, zoomPlugin
       );
       setIsRendering(true);
       setTimeout(() => setIsRendering(false), 500);
@@ -46,10 +37,6 @@ export default function Results({ chartData }) {
     setup();
   }, [chartData, activeTab]);
 
-  /**
-   * Helper to format data for XY scatter/line plots.
-   * Filters non-positive X values to prevent Chart.js Logarithmic scale crashes.
-   */
   const formatXYData = (labels, dataArr) => {
     if (!labels || !dataArr) return [];
     return dataArr
@@ -57,7 +44,31 @@ export default function Results({ chartData }) {
       .filter((p) => p.x > 0); 
   };
 
-  const getOptions = (xAxis = "category", xTitle = "Time", yTitle = "Value") => ({
+  /**
+   * Finds the frequency with the highest magnitude to set the zoom window.
+   */
+  const getSpectrumXBounds = () => {
+    if (!chartData.userSpectrum || !chartData.freqLabels) return { min: 0, max: undefined };
+    
+    // Find index of the max magnitude
+    let maxIdx = 0;
+    let maxVal = -1;
+    chartData.userSpectrum.forEach((val, i) => {
+      if (val > maxVal) {
+        maxVal = val;
+        maxIdx = i;
+      }
+    });
+
+    const peakFreq = parseFloat(chartData.freqLabels[maxIdx]);
+    // Zoom window: +/- 2 octaves or a fixed range around the peak
+    return {
+      min: Math.max(0, peakFreq * 0.2),
+      max: peakFreq * 5
+    };
+  };
+
+  const getOptions = (xAxis = "category", xTitle = "Time", yTitle = "Value", bounds = {}) => ({
     responsive: true,
     maintainAspectRatio: false,
     animation: false,
@@ -65,7 +76,9 @@ export default function Results({ chartData }) {
       x: { 
         type: xAxis, 
         title: { display: true, text: xTitle },
-        ticks: { maxTicksLimit: 10 }
+        ticks: { maxTicksLimit: 10 },
+        min: bounds.min,
+        max: bounds.max
       },
       y: { 
         title: { display: true, text: yTitle }, 
@@ -96,7 +109,7 @@ export default function Results({ chartData }) {
 
   return (
     <div className="space-y-6">
-      {/* --- SCORECARD --- */}
+      {/* --- SCORECARD (UI Unchanged) --- */}
       <div className={`p-4 rounded-xl border-2 flex justify-between items-center transition-colors ${
         passed ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"
       }`}>
@@ -143,36 +156,19 @@ export default function Results({ chartData }) {
         <div className="space-y-6 animate-in fade-in duration-300">
           <div className={`${activeTab === "bode" ? "h-[650px]" : "h-[450px]"} bg-white p-4 border rounded-xl shadow-sm`}>
             
-            {/* DIGITAL: Logic Analyzer (Stepped Decimal Waveform) */}
             {activeTab === "logic" && (
               <Line 
                 options={getOptions("category", "Clock Cycle", "Decimal Value")} 
                 data={{
                   labels: chartData.table.map(r => `C${r.cycle}`),
                   datasets: [
-                    { 
-                      label: "Expected", 
-                      data: chartData.table.map(r => r.expected), 
-                      stepped: true, 
-                      borderColor: "rgba(59, 130, 246, 0.4)", 
-                      borderDash: [5,5], 
-                      pointRadius: 0 
-                    },
-                    { 
-                      label: "Actual", 
-                      data: chartData.table.map(r => r.actual), 
-                      stepped: true, 
-                      borderColor: passed ? "#22c55e" : "#ef4444", 
-                      borderWidth: 3,
-                      pointBackgroundColor: chartData.table.map(r => r.passed ? "#22c55e" : "#ef4444"),
-                      pointRadius: 4
-                    }
+                    { label: "Expected", data: chartData.table.map(r => r.expected), stepped: true, borderColor: "rgba(59, 130, 246, 0.4)", borderDash: [5,5], pointRadius: 0 },
+                    { label: "Actual", data: chartData.table.map(r => r.actual), stepped: true, borderColor: passed ? "#22c55e" : "#ef4444", borderWidth: 3, pointBackgroundColor: chartData.table.map(r => r.passed ? "#22c55e" : "#ef4444"), pointRadius: 4 }
                   ]
                 }} 
               />
             )}
 
-            {/* DIGITAL: Truth Table Comparison */}
             {activeTab === "table" && (
               <div className="overflow-auto h-full">
                 <table className="table table-zebra w-full text-center font-mono">
@@ -195,7 +191,6 @@ export default function Results({ chartData }) {
               </div>
             )}
 
-            {/* ANALOG: Time Domain Transient Analysis */}
             {activeTab === "time" && (
               <Line 
                 options={getOptions("category", "Time (ms)", "Voltage (V)")} 
@@ -209,20 +204,36 @@ export default function Results({ chartData }) {
               />
             )}
 
-            {/* ANALOG: Frequency Spectrum (FFT Magnitude) */}
+            {/* ANALOG: Updated Spectrum to Line and Zoomed to Peak */}
+            
             {activeTab === "spectrum" && (
-              <Bar 
-                options={{...getOptions("linear", "Frequency (Hz)", "Magnitude"), barPercentage: 0.5}} 
+              <Line 
+                options={getOptions("linear", "Frequency (Hz)", "Magnitude", getSpectrumXBounds())} 
                 data={{
                   datasets: [
-                    { label: "Expected", data: formatXYData(chartData.freqLabels, chartData.solutionSpectrum), backgroundColor: "rgba(59, 130, 246, 0.4)" },
-                    { label: "Your Output", data: formatXYData(chartData.freqLabels, chartData.userSpectrum), backgroundColor: "rgba(34, 197, 94, 0.7)" }
+                    { 
+                      label: "Expected", 
+                      data: formatXYData(chartData.freqLabels, chartData.solutionSpectrum), 
+                      borderColor: "rgba(59, 130, 246, 0.4)", 
+                      backgroundColor: "rgba(59, 130, 246, 0.1)",
+                      fill: true,
+                      pointRadius: 0,
+                      borderWidth: 1
+                    },
+                    { 
+                      label: "Your Output", 
+                      data: formatXYData(chartData.freqLabels, chartData.userSpectrum), 
+                      borderColor: "rgba(34, 197, 94, 1)", 
+                      backgroundColor: "rgba(34, 197, 94, 0.2)",
+                      fill: true,
+                      pointRadius: 2,
+                      borderWidth: 2
+                    }
                   ]
                 }} 
               />
             )}
 
-            {/* ANALOG: Bode Plot (Magnitude & Phase Response) */}
             {activeTab === "bode" && (
               <div className="flex flex-col h-full gap-4">
                 <div className="flex-1">

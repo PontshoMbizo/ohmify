@@ -18,7 +18,6 @@ export default function AutoMarker({ onBack, solution, capturedData, topics = ["
   useEffect(() => {
     setChartData(null);
   }, [capturedData]);
-  console.log("capturedData:", capturedData);
   const extractDataPoints = useCallback((text) => {
     if (!text) return [];
     return text.trim().split("\n")
@@ -41,7 +40,6 @@ export default function AutoMarker({ onBack, solution, capturedData, topics = ["
             decimalOutput: parseInt(val.trim(), 10)
           }));
 
-          console.log("in process digital:");
         const grade = gradingUtils.gradeDigital(userTable, goldenTable);
         const verdict = gradingUtils.getVerdict(grade.matchRatio, topics, true);
 
@@ -72,7 +70,6 @@ export default function AutoMarker({ onBack, solution, capturedData, topics = ["
 
       const targetBode = signalUtils.getFrequencyData(userVin, solOutData, sampleRate);
       const userBode = signalUtils.getFrequencyData(userVin, userVout, sampleRate);
-
       setChartData({
         type: "analog",
         timeLabels,
@@ -103,7 +100,6 @@ export default function AutoMarker({ onBack, solution, capturedData, topics = ["
       }
     }
   }, [capturedData, chartData, processDigital, processAnalog]);
-
   return (
     <div className="relative space-y-4 min-h-[500px] w-full p-4 overflow-y-auto bg-base-100">
       <div className="flex items-center gap-4">
