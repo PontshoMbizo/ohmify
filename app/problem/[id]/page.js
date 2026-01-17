@@ -8,7 +8,6 @@ import { db } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import LoadingAnimation from "@/components/LoadingAnimation";
 import SolveProblem from "@/components/SimulationWindow/SolveProblem";
-import { GeneralUtils } from "@/lib/GeneralUtils";
 
 export default function ProblemPage() {
   const { id } = useParams();
@@ -60,22 +59,13 @@ export default function ProblemPage() {
   if (loading) return <LoadingAnimation />;
   if (!problem) return <div className="p-10">Problem not found.</div>;
 
-  /**
-   * Determine simulation parameters based on the fetched data
-   */
-  const timestep = GeneralUtils.getTimestepForProblem(problem);
-
-  console.log("Timestep:", timestep);
-  console.log("Sample count:", problem.sampleCount);
-
   return (
     <>
-      <div className="h-screen w-full grid grid-cols-1 lg:grid-cols-2 pt-12">
+      <div className="h-screen w-full grid grid-cols-1 lg:grid-cols-2">
         <ProblemWindow problem={problem} />
         <SolveProblem 
           circuit={problem.initialCircuit} 
           solution={problem.solutionWaveform} 
-          timestep={timestep} 
           topics={problem.topics || []}
           sampleCount={problem.sampleCount}
         />

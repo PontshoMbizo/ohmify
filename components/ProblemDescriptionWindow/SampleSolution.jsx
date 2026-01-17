@@ -40,7 +40,7 @@ export default function SampleSolution({ problem }) {
       .filter((v) => !isNaN(v));
   }, [problem?.solutionWaveform]);
 
-  // 3. Timestep Logic
+  // 3. Timestep Logic (remeber to change once the timestep is included in the db)
   const getTimestepForProblem = () => {
     if (!problem?.topic) return 5e-6;
     if (problem.topic.includes("Power Electronics")) return 1e-3;

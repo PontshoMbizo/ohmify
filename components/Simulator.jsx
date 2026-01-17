@@ -8,7 +8,6 @@ export default function Simulator({
   onSubmit, 
   mode = "sample", 
   isDigital = false, 
-  timestep = 5e-6, 
   sampleCount
 }) {
   const [fullScreen, setFullScreen] = useState(false);
@@ -18,7 +17,7 @@ export default function Simulator({
   const getSim = () => iframeRef.current?.contentWindow?.CircuitJS1 || null;
 
   const handleIframeLoad = () => {
-    setTimeout(loadCircuit, 1000);
+    setTimeout(loadCircuit, 2000);
   };
 
   const loadCircuit = () => {
@@ -95,7 +94,6 @@ export default function Simulator({
       } 
       // Apply universal simulation settings
       sim.setSimRunning(true);
-      sim.setMaxTimeStep(timestep);
 
       let capturedData;
       if (isDigital) {

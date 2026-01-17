@@ -19,6 +19,7 @@ export default function CreateProblem() {
     difficulty: "Easy",
     topics: [], 
     sampleCount: 30720,
+    timeStep: "5e-6",
     templateCircuit: "", 
     solutionData: null,
   });

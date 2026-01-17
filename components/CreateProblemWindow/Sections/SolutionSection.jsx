@@ -13,7 +13,7 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
     } else {
       dataString = capturedData.data.output.join("\n");
     }
-    updateProblem({ solutionData: dataString });
+    updateProblem({ solutionData: dataString, timeStep : capturedData.timeStep });
   };
 
   const finalizeProblem = async () => {
@@ -44,8 +44,8 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
       // Save sampled waveform data
       await setDoc(doc(db, "Problems", problemRef.id, "solutionWaveform", "data"), {
         samples: problem.solutionData,
-        sampleRate: 1 / GeneralUtils.getTimestepForProblem(problem),
-        sampleCount: problem.sampleCount
+        sampleCount: problem.sampleCount,
+        timeStep: problem.timeStep
       });
 
       alert("Problem Published Successfully!");
@@ -65,8 +65,7 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
         <Simulator 
           nodes={["input", "output"]}
           circuit={problem.templateCircuit} 
-          onSubmit={handleCaptureSolution} 
-          timestep={GeneralUtils.getTimestepForProblem(problem)}
+          onSubmit={handleCaptureSolution}
           isDigital={GeneralUtils.isDigitalProblem(problem.topics)}
           sampleCount={problem.sampleCount}
         />

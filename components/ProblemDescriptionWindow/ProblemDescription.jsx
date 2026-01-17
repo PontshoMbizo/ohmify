@@ -2,6 +2,9 @@
 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css'; // Essential for symbols to render correctly
 
 export default function ProblemDescription({ problem }) {
   // Reusable tags for UI 
@@ -15,7 +18,7 @@ export default function ProblemDescription({ problem }) {
   }[problem.difficulty] || "badge-ghost";
 
   return (
-    <div className="w-full h-[calc(100vh-1rem)] p-6 overflow-y-auto bg-white text-gray-800">
+    <div className="w-full max-h-screen p-6 overflow-y-auto bg-white text-gray-800">
       
       {/* Title */}
       <h1 className="text-3xl font-black uppercase tracking-tighter mb-2">
@@ -43,7 +46,16 @@ export default function ProblemDescription({ problem }) {
 
       {/* RENDER MARKDOWN DESCRIPTION */}
       <div className="prose prose-slate max-w-none prose-headings:font-black prose-headings:uppercase prose-headings:tracking-tight prose-code:text-blue-600 prose-pre:bg-gray-900 prose-pre:text-gray-100">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+      {/* <ReactMarkdown 
+          remarkPlugins={[remarkGfm, remarkMath]} 
+          rehypePlugins={[rehypeKatex]}
+        >
+          {problem.description}
+        </ReactMarkdown> */}
+
+                <ReactMarkdown 
+          remarkPlugins={[remarkGfm, remarkMath]} 
+        >
           {problem.description}
         </ReactMarkdown>
       </div>
