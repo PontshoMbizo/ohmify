@@ -14,15 +14,29 @@ export default function CreateProblem() {
   const [isPublishing, setIsPublishing] = useState(false);
   
   const [problem, setProblem] = useState({
-    title: "",
-    description: "",
-    difficulty: "Easy",
-    topics: [], 
-    sampleCount: 30720,
-    timeStep: "5e-6",
-    templateCircuit: "", 
-    solutionData: null,
-  });
+  title: "",
+  description: "",
+  difficulty: "Easy",
+  topics: [],
+  sampleCount: 30720,
+  timeStep: "5e-6",
+  // New test configuration for creator
+  testConfig: {
+    noload: 1e12,
+    rMin: 100,
+    rMax: 10000,
+    payload1: "",
+    payload2: "",
+    payload3: "",
+  },
+  // Store three separate solution strings
+  solutions: {
+    test1: null,
+    test2: null,
+    test3: null,
+  },
+  templateCircuit: "",
+});
 
   useEffect(() => {
     document.documentElement.style.overflow = "hidden";

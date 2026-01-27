@@ -7,7 +7,7 @@ import { auth } from "@/lib/firebase";
 import { signOut } from "firebase/auth";
 // Import icons (Install via: npm install lucide-react)
 import { 
-  UserCircle, Settings, Briefcase, GraduationCap, ShoppingCart, Coffee, 
+  UserCircle, Settings, Briefcase, GraduationCap, Coffee, 
   MessageSquare, LogOut, ExternalLink, Bell 
 } from "lucide-react";
 
@@ -69,7 +69,7 @@ export default function Navbar({ color }) {
 
             {/* ENHANCED AVATAR DROPDOWN */}
             <div className="dropdown dropdown-end">
-              <div tabIndex={0} role="button" className="btn btn-ghost btn-circle avatar">
+              <div tabIndex={0} role="button" className="btn btn-ghost btn-circle avatar hover:bg-green-200">
                 <div className="w-8 rounded-full border">
                   <img alt="avatar" src={user.photoURL || "profile.png"} />
                 </div>

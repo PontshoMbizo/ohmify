@@ -4,29 +4,35 @@ import Simulator from "@/components/Simulator";
 import AutoMarker from "@/components/SimulationWindow/AutoMarker/AutoMarker.jsx";
 import { GeneralUtils } from "@/lib/GeneralUtils";
 import { useState, useEffect } from "react";
-import { useParams } from "next/navigation"; // To get the unique problem ID
+import { useParams } from "next/navigation";
 
-export default function SolveProblem({ circuit, solution, topics = [], sampleCount }) {
-  const { id: problemId } = useParams(); // Using problem ID as the storage key
+export default function SolveProblem({ circuit, solution, topics = [], testbench,sampleCount }) {
+  const { id: problemId } = useParams();
   const [simResults, setSimResults] = useState(null);
   
-  // Initialize state with null to avoid hydration mismatch
-  const [currentCircuit, setCurrentCircuit] = useState(null);
+  // --- LIFTED STATE ---
+  // These stay alive even when AutoMarker unmounts
+  const [activeTestTab, setActiveTestTab] = useState("test1"); 
+  const [testSuite, setTestSuite] = useState({
+    test1: null,
+    test2: null,
+    test3: null,
+  });
 
-  // KEY FOR UNMOUNTING
+  const [currentCircuit, setCurrentCircuit] = useState(null);
   const [resetKey, setResetKey] = useState(0);
 
-  // 1. Load from localStorage on Mount
+  // 1. Load progress from localStorage
   useEffect(() => {
     const savedProgress = localStorage.getItem(`draft_${problemId}`);
     if (savedProgress) {
       setCurrentCircuit(savedProgress);
     } else {
-      setCurrentCircuit(circuit); // Fallback to template if no save exists
+      setCurrentCircuit(circuit);
     }
   }, [problemId, circuit]);
 
-  // 2. Clear results and return to simulator
+  // 2. Navigation
   const handleBack = () => {
     setSimResults(null);
   };
@@ -35,45 +41,46 @@ export default function SolveProblem({ circuit, solution, topics = [], sampleCou
     if (sim && typeof sim.exportCircuit === 'function') {
       const exported = sim.exportCircuit();
       setCurrentCircuit(exported);
-      
-      // Save to localStorage immediately on submit
       localStorage.setItem(`draft_${problemId}`, exported);
     }
+    // This triggers the view switch to AutoMarker
     setSimResults(data);
   };
 
-  // 3. Optional: Add a "Clear Draft" function if the user wants to reset to template
   const resetToTemplate = () => {
     if (confirm("Reset circuit to original template? This will delete your progress.")) {
       localStorage.removeItem(`draft_${problemId}`);
       setCurrentCircuit(circuit);
-      // INCREMENT KEY TO FORCE UNMOUNT/REMOUNT
+      setTestSuite({ test1: null, test2: null, test3: null }); // Clear grades too
       setResetKey(prev => prev + 1);
     }
   };
 
-  if (currentCircuit === null) return null; // Wait for useEffect to load storage
+  if (currentCircuit === null) return null;
 
   return (
-    <div className="h-screen w-full overflow-y-auto border-l border-gray-200 bg-white">
+    <div className="h-screen w-full overflow-y-auto bg-white">
       {simResults ? (
-        <AutoMarker 
+        <AutoMarker
+          // Pass the lifted state props
+          activeTestTab={activeTestTab}
+          setActiveTestTab={setActiveTestTab} 
+          testSuite={testSuite}
+          setTestSuite={setTestSuite}
           onBack={handleBack} 
           solution={solution} 
           capturedData={simResults} 
           topics={topics}
+          testbench={testbench}
         />
       ) : (
         <div className="relative h-full">
-          {/* Reset Button UI */}
           <button 
             onClick={resetToTemplate}
-            type="submit"
-            className="absolute bottom-20 right-6 z-10 btn btn-sm btn-ghost text-wihte hover:text-white hover:bg-green-600"
+            className="absolute bottom-20 right-9 z-10 hover:text-green-500 hover:cursor-pointer text-xs font-semibold"
           >
             Reset Circuit
           </button>
-
           
           <Simulator
             key={`${problemId}-${resetKey}`}

@@ -13,7 +13,7 @@ import {
   Tooltip, 
   Legend 
 } from "chart.js";
-import { Line, Bar } from "react-chartjs-2";
+import { Line } from "react-chartjs-2";
 import LoadingAnimation from "@/components/LoadingAnimation";
 import { GeneralUtils } from "@/lib/GeneralUtils";
 
@@ -23,6 +23,11 @@ export default function Results({ chartData }) {
   const { passed, score, message, nrmse } = chartData.verdict || {};
   
   const chartRef = useRef(null);
+
+  // Safety check for resistance (fallback to 1TOhm for No-Load)
+  const resistance = (chartData.resistance && chartData.resistance > 0) 
+    ? chartData.resistance 
+    : 1e12; 
 
   useEffect(() => {
     const setup = async () => {
@@ -41,31 +46,18 @@ export default function Results({ chartData }) {
     if (!labels || !dataArr) return [];
     return dataArr
       .map((val, i) => ({ x: parseFloat(labels[i]), y: val }))
-      .filter((p) => p.x > 0); 
+      .filter((p) => !isNaN(p.x) && p.x > 0); 
   };
 
-  /**
-   * Finds the frequency with the highest magnitude to set the zoom window.
-   */
   const getSpectrumXBounds = () => {
     if (!chartData.userSpectrum || !chartData.freqLabels) return { min: 0, max: undefined };
-    
-    // Find index of the max magnitude
     let maxIdx = 0;
     let maxVal = -1;
     chartData.userSpectrum.forEach((val, i) => {
-      if (val > maxVal) {
-        maxVal = val;
-        maxIdx = i;
-      }
+      if (val > maxVal) { maxVal = val; maxIdx = i; }
     });
-
     const peakFreq = parseFloat(chartData.freqLabels[maxIdx]);
-    // Zoom window: +/- 2 octaves or a fixed range around the peak
-    return {
-      min: Math.max(0, peakFreq * 0.2),
-      max: peakFreq * 5
-    };
+    return { min: Math.max(0, peakFreq * 0.2), max: peakFreq * 5 };
   };
 
   const getOptions = (xAxis = "category", xTitle = "Time", yTitle = "Value", bounds = {}) => ({
@@ -99,7 +91,9 @@ export default function Results({ chartData }) {
             if (chartData.type === "digital") {
                return `${ctx.dataset.label}: ${val} (${GeneralUtils.toHex(val)})`;
             }
-            return `${ctx.dataset.label}: ${val.toFixed(4)}`;
+            // Explicit unit check for current vs voltage
+            const unit = ctx.dataset.label.toLowerCase().includes("current") ? " mA" : " V";
+            return `${ctx.dataset.label}: ${val.toFixed(3)}${unit}`;
           }
         }
       },
@@ -109,7 +103,7 @@ export default function Results({ chartData }) {
 
   return (
     <div className="space-y-6">
-      {/* --- SCORECARD (UI Unchanged) --- */}
+      {/* --- SCORECARD --- */}
       <div className={`p-4 rounded-xl border-2 flex justify-between items-center transition-colors ${
         passed ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"
       }`}>
@@ -127,7 +121,7 @@ export default function Results({ chartData }) {
             <div>
               <p className="text-[10px] font-bold opacity-40 uppercase">NRMSE</p>
               <p className="text-xl font-mono font-bold text-gray-700">
-                {parseFloat(nrmse).toFixed(4)}
+                {parseFloat(nrmse || 0).toFixed(4)}
               </p>
             </div>
           )}
@@ -144,7 +138,7 @@ export default function Results({ chartData }) {
         ) : (
           <>
             <button className={`tab transition-all ${activeTab === 'time' ? 'tab-active' : ''}`} onClick={() => setActiveTab('time')}>Time Domain</button>
-            <button className={`tab transition-all ${activeTab === 'spectrum' ? 'tab-active' : ''}`} onClick={() => setActiveTab('spectrum')}>Spectrum (FFT)</button>
+            <button className={`tab transition-all ${activeTab === 'spectrum' ? 'tab-active' : ''}`} onClick={() => setActiveTab('spectrum')}>Frequency Spectrum</button>
             <button className={`tab transition-all ${activeTab === 'bode' ? 'tab-active' : ''}`} onClick={() => setActiveTab('bode')}>Bode Plot</button>
           </>
         )}
@@ -154,7 +148,7 @@ export default function Results({ chartData }) {
         <div className="h-[450px] flex justify-center items-center"><LoadingAnimation /></div>
       ) : (
         <div className="space-y-6 animate-in fade-in duration-300">
-          <div className={`${activeTab === "bode" ? "h-[650px]" : "h-[450px]"} bg-white p-4 border rounded-xl shadow-sm`}>
+          <div className={`${((activeTab === "bode" || activeTab === "time") && chartData.type === "analog") ? "h-[650px]" : "h-[450px]"} bg-white p-4 border rounded-xl shadow-sm`}>
             
             {activeTab === "logic" && (
               <Line 
@@ -171,7 +165,7 @@ export default function Results({ chartData }) {
 
             {activeTab === "table" && (
               <div className="overflow-auto h-full">
-                <table className="table table-zebra w-full text-center font-mono">
+                <table className="table table-zebra w-full text-center font-mono text-xs">
                   <thead className="sticky top-0 bg-base-200">
                     <tr><th>Cycle</th><th>Expected</th><th>Actual</th><th>Result</th></tr>
                   </thead>
@@ -191,21 +185,36 @@ export default function Results({ chartData }) {
               </div>
             )}
 
-            {activeTab === "time" && (
-              <Line 
-                options={getOptions("category", "Time (ms)", "Voltage (V)")} 
-                data={{
-                  labels: chartData.timeLabels,
-                  datasets: [
-                    { label: "Expected", data: chartData.solutionData, borderColor: "#3b82f644", borderDash: [5,5], pointRadius: 0 },
-                    { label: "Your Output", data: chartData.userData, borderColor: "#22c55e", pointRadius: 0, borderWidth: 2.5 }
-                  ]
-                }} 
-              />
+            {activeTab === "time" && chartData.type === "analog" && (
+              <div className="flex flex-col h-full gap-4">
+                <div className="flex-1">
+                  <Line 
+                    options={getOptions("category", "Time (ms)", "Voltage (V)")} 
+                    data={{
+                      labels: chartData.timeLabels,
+                      datasets: [
+                        { label: "Expected Voltage", data: chartData.solutionData, borderColor: "#3b82f644", borderDash: [5,5], pointRadius: 0 },
+                        { label: "Your Voltage", data: chartData.userData, borderColor: "#22c55e", pointRadius: 0, borderWidth: 2.5 }
+                      ]
+                    }} 
+                  />
+                </div>
+                {/* CURRENT GRAPH (mA) */}
+                <div className="flex-1 border-t border-base-300 pt-4">
+                  <Line 
+                    options={getOptions("category", "Time (ms)", "Current (mA)")} 
+                    data={{
+                      labels: chartData.timeLabels,
+                      datasets: [
+                        { label: "Expected Current", data: chartData.solutionData.map(v => (v / resistance) * 1000), borderColor: "rgba(59, 130, 246, 0.2)", borderDash: [5,5], pointRadius: 0 },
+                        { label: "Your Current", data: chartData.userData.map(v => (v / resistance) * 1000), borderColor: "#f59e0b", pointRadius: 0, borderWidth: 2.5 }
+                      ]
+                    }} 
+                  />
+                </div>
+              </div>
             )}
 
-            {/* ANALOG: Updated Spectrum to Line and Zoomed to Peak */}
-            
             {activeTab === "spectrum" && (
               <Line 
                 options={getOptions("linear", "Frequency (Hz)", "Magnitude", getSpectrumXBounds())} 
