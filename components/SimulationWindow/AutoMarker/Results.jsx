@@ -24,7 +24,10 @@ export default function Results({ chartData }) {
   
   const chartRef = useRef(null);
 
-  // Safety check for resistance (fallback to 1TOhm for No-Load)
+  // Logic to determine if we stack Voltage + Current or show Voltage only
+  const isLoadTest = chartData.type === "analog" && !chartData.isSignalOnly;
+
+  // Safety check for resistance (fallback to high impedance for No-Load/Signal)
   const resistance = (chartData.resistance && chartData.resistance > 0) 
     ? chartData.resistance 
     : 1e12; 
@@ -91,7 +94,6 @@ export default function Results({ chartData }) {
             if (chartData.type === "digital") {
                return `${ctx.dataset.label}: ${val} (${GeneralUtils.toHex(val)})`;
             }
-            // Explicit unit check for current vs voltage
             const unit = ctx.dataset.label.toLowerCase().includes("current") ? " mA" : " V";
             return `${ctx.dataset.label}: ${val.toFixed(3)}${unit}`;
           }
@@ -148,7 +150,7 @@ export default function Results({ chartData }) {
         <div className="h-[450px] flex justify-center items-center"><LoadingAnimation /></div>
       ) : (
         <div className="space-y-6 animate-in fade-in duration-300">
-          <div className={`${((activeTab === "bode" || activeTab === "time") && chartData.type === "analog") ? "h-[650px]" : "h-[450px]"} bg-white p-4 border rounded-xl shadow-sm`}>
+          <div className={`${(activeTab === "bode" || (activeTab === "time" && isLoadTest)) ? "h-[650px]" : "h-[450px]"} bg-white p-4 border rounded-xl shadow-sm`}>
             
             {activeTab === "logic" && (
               <Line 
@@ -199,19 +201,22 @@ export default function Results({ chartData }) {
                     }} 
                   />
                 </div>
-                {/* CURRENT GRAPH (mA) */}
-                <div className="flex-1 border-t border-base-300 pt-4">
-                  <Line 
-                    options={getOptions("category", "Time (ms)", "Current (mA)")} 
-                    data={{
-                      labels: chartData.timeLabels,
-                      datasets: [
-                        { label: "Expected Current", data: chartData.solutionData.map(v => (v / resistance) * 1000), borderColor: "rgba(59, 130, 246, 0.2)", borderDash: [5,5], pointRadius: 0 },
-                        { label: "Your Current", data: chartData.userData.map(v => (v / resistance) * 1000), borderColor: "#f59e0b", pointRadius: 0, borderWidth: 2.5 }
-                      ]
-                    }} 
-                  />
-                </div>
+
+                {/* CURRENT GRAPH: Only show if NOT signalOnly (Load Tests) */}
+                {isLoadTest && (
+                  <div className="flex-1 border-t border-base-300 pt-4">
+                    <Line 
+                      options={getOptions("category", "Time (ms)", "Current (mA)")} 
+                      data={{
+                        labels: chartData.timeLabels,
+                        datasets: [
+                          { label: "Expected Current", data: chartData.solutionData.map(v => (v / resistance) * 1000), borderColor: "rgba(59, 130, 246, 0.2)", borderDash: [5,5], pointRadius: 0 },
+                          { label: "Your Current", data: chartData.userData.map(v => (v / resistance) * 1000), borderColor: "#f59e0b", pointRadius: 0, borderWidth: 2.5 }
+                        ]
+                      }} 
+                    />
+                  </div>
+                )}
               </div>
             )}
 

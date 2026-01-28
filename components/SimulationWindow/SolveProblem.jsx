@@ -6,7 +6,7 @@ import { GeneralUtils } from "@/lib/GeneralUtils";
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 
-export default function SolveProblem({ circuit, solution, topics = [], testbench,sampleCount }) {
+export default function SolveProblem({ circuit, solution, topics = [], testbench, testType, sampleCount }) {
   const { id: problemId } = useParams();
   const [simResults, setSimResults] = useState(null);
   
@@ -62,7 +62,7 @@ export default function SolveProblem({ circuit, solution, topics = [], testbench
     <div className="h-screen w-full overflow-y-auto bg-white">
       {simResults ? (
         <AutoMarker
-          // Pass the lifted state props
+          testType={testType}
           activeTestTab={activeTestTab}
           setActiveTestTab={setActiveTestTab} 
           testSuite={testSuite}

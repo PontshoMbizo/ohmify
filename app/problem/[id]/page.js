@@ -84,6 +84,7 @@ console.log(problem.testbench);
           sampleCount={problem.sampleCount}
           timeStep={problem.timeStep}
           testbench={problem.testbench}
+          testType={problem.testType}
         />
       </div>
     </div>

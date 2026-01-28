@@ -18,25 +18,26 @@ export default function CreateProblem() {
   description: "",
   difficulty: "Easy",
   topics: [],
+  problemType: "load", // Default to 'load' (Analog Triple Test)
   sampleCount: 30720,
   timeStep: "5e-6",
   // New test configuration for creator
-  testConfig: {
-    noload: 1e12,
-    rMin: 100,
-    rMax: 10000,
-    payload1: "",
-    payload2: "",
-    payload3: "",
-  },
+  testConfig: {},
   // Store three separate solution strings
-  solutions: {
-    test1: null,
-    test2: null,
-    test3: null,
-  },
+  solutions: {},
   templateCircuit: "",
 });
+
+const updateProblemType = (type) => {
+  setProblem(prev => ({ 
+    ...prev, 
+    problemType: type,
+    // Reset testConfig to match new type structure
+    testConfig: type === "digital" ? {} : 
+                type === "signal" ? {} : 
+                { noLoad: 1e12, rMax: 10000, rMin: 100 } 
+  }));
+};
 
   useEffect(() => {
     document.documentElement.style.overflow = "hidden";
