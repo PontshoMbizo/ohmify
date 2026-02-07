@@ -2,8 +2,8 @@ import React from "react";
 
 export default function Hero() {
   return (
-    <section className="relative overflow-hidden bg-white pt-16 pb-32">
-      <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 px-6 lg:grid-cols-2">
+    <section className="relative overflow-hidden bg-white pt-16 pb-16">
+      <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-6 px-6 lg:grid-cols-2">
         
         {/* LEFT PANEL: Illustration & Decorative Elements */}
         <div className="relative flex flex-col items-center lg:items-start">
@@ -11,7 +11,7 @@ export default function Hero() {
             <img
               src="coming-soon.png"
               alt="Circuit Hero"
-              className="h-72 w-auto object-contain lg:h-96"
+              className="h-88  w-auto object-contain lg:h-96"
             />
             {/* Decorative Elements */}
             <div className="absolute -top-4 -right-4 h-6 w-6 rounded-full bg-blue-600 opacity-70 animate-pulse" />

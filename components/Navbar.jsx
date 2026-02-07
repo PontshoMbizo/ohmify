@@ -2,10 +2,6 @@
 
 import React from "react";
 import { useAuth } from "@/components/Auth/AuthProvider.jsx";
-import { GoogleAuth } from "@/lib/authUtils";
-import { auth } from "@/lib/firebase";
-import { signOut } from "firebase/auth";
-// Import icons (Install via: npm install lucide-react)
 import { 
   UserCircle, Settings, Briefcase, GraduationCap, Coffee, 
   MessageSquare, LogOut, ExternalLink, Bell 
@@ -57,7 +53,7 @@ export default function Navbar({ color }) {
 
             <div className="dropdown dropdown-end">
               <div tabIndex={0} role="button" className="flex items-center font-bold text-xs hover:cursor-pointer"><Bell size={20} />{user?.notifications || 0}</div>
-              <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow-2xl bg-base-100 rounded-box w-64 border border-gray-100 text-[15px] text-gray-700">
+              <ul tabIndex={0} className="dropdown-content z-[50] menu p-2 shadow-2xl bg-base-100 rounded-box w-64 border border-gray-100 text-[15px] text-gray-700">
                 <li>
                   <a><Bell size={18}/> Notifications</a>
                 </li>
@@ -75,7 +71,7 @@ export default function Navbar({ color }) {
                 </div>
               </div>
               
-              <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow-2xl bg-base-100 rounded-box w-64 border border-gray-100 text-[15px] text-gray-700">
+              <ul tabIndex={0} className="dropdown-content z-[50] menu p-2 shadow-2xl bg-base-100 rounded-box w-64 border border-gray-100 text-[15px] text-gray-700">
                 {/* Section 1: Account */}
                 <li className="hover-bordered">
                   <a href="/profile"><UserCircle size={18}/> View Profile</a>

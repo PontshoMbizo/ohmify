@@ -24,46 +24,42 @@ ChartJS.register(
 );
 
 export default function SampleSolution({ problem }) {
-  // 1. Identify if this is a digital problem
-  const isDigital = useMemo(() => {
-    const digitalTopics = ["Digital Systems", "Combinational CCT", "Sequential CCT", "Analog-Digital"];
-    return problem?.topic?.some(t => digitalTopics.includes(t));
-  }, [problem?.topic]);
+  // 1. Identify problem type using the new testType metadata
+  const isDigital = problem?.testType === "digital";
 
-  // 2. Parse the newline-separated string into a numeric array
+  // 2. Parse only the "No-Load" (test1) solution data
   const solOutData = useMemo(() => {
-    if (!problem?.solutionWaveform) return [];
-    return problem.solutionWaveform
+    // Access the test1 slot from the solutions map assembled in ProblemPage
+    const rawData = problem?.solutions?.test1; 
+    if (!rawData) return [];
+
+    return rawData
       .trim()
       .split("\n")
       .map((v) => parseFloat(v))
       .filter((v) => !isNaN(v));
-  }, [problem?.solutionWaveform]);
+  }, [problem?.solutions]);
 
-  // 3. Timestep Logic (remeber to change once the timestep is included in the db)
-  const getTimestepForProblem = () => {
-    if (!problem?.topic) return 5e-6;
-    if (problem.topic.includes("Power Electronics")) return 1e-3;
-    if (problem.topic.some(t => t.includes("RF") || t.includes("Microwave"))) return 1e-9;
-    return 5e-6;
-  };
-
-  const dt = getTimestepForProblem();
+  // 3. Timestep Logic 
+  const dt = useMemo(() => {
+    return Number(problem?.timeStep) || 5e-6;
+  }, [problem?.timeStep]);
 
   // 4. Axis Labels
   const labels = useMemo(() => {
     if (isDigital) {
-      // For digital, labels are Cycle indices
       return solOutData.map((_, i) => `Cycle ${i}`);
     }
-    // For analog, labels are Time in ms
     return solOutData.map((_, i) => (i * dt * 1000).toFixed(4));
   }, [solOutData, dt, isDigital]);
 
   if (solOutData.length === 0) {
     return (
-      <div className="flex items-center justify-center h-64 border-2 border-dashed border-base-300 rounded-xl bg-base-50 text-gray-400 italic">
-        No solution data available for this problem.
+      <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-base-300 rounded-xl bg-base-50 text-gray-400 gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+        <p className="text-xs font-bold uppercase tracking-widest opacity-40">No Reference Waveform</p>
       </div>
     );
   }
@@ -71,15 +67,15 @@ export default function SampleSolution({ problem }) {
   return (
     <div className="space-y-4 animate-in fade-in duration-500 overflow-hidden">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-bold uppercase tracking-widest text-gray-500">
-          {isDigital ? "Digital Logic Sequence" : "Time-Domain Response"}
+        <h3 className="text-[10px] font-black uppercase tracking-widest text-blue-600">
+          {isDigital ? "Reference Logic Sequence" : "No-Load Time-Domain Response"}
         </h3>
-        <span className="badge badge-sm badge-outline opacity-50">
+        <span className="badge badge-sm badge-ghost font-mono opacity-50">
           {solOutData.length} {isDigital ? "Cycles" : "Samples"}
         </span>
       </div>
 
-      <div className="w-full h-[400px] bg-white p-2 border rounded-xl shadow-sm">
+      <div className="w-full h-[350px] bg-white p-4 border rounded-2xl shadow-sm">
         <Line
           options={{
             responsive: true,
@@ -90,12 +86,17 @@ export default function SampleSolution({ problem }) {
               tooltip: {
                 mode: 'index',
                 intersect: false,
+                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                titleColor: '#1e293b',
+                bodyColor: '#1e293b',
+                borderColor: '#e2e8f0',
+                borderWidth: 1,
                 callbacks: {
                   label: (context) => {
                     const val = context.parsed.y;
                     return isDigital 
                       ? ` Decimal: ${val} (0x${val.toString(16).toUpperCase()})` 
-                      : ` ${val} V`;
+                      : ` ${val.toFixed(4)} V`;
                   },
                   title: (items) => isDigital ? items[0].label : `Time: ${items[0].label} ms`
                 }
@@ -104,15 +105,18 @@ export default function SampleSolution({ problem }) {
             scales: {
               x: {
                 display: true,
-                title: { display: true, text: isDigital ? "Clock Cycles" : "Time (ms)" },
-                ticks: { maxTicksLimit: 10 },
+                title: { display: true, text: isDigital ? "Clock Cycles" : "Time (ms)", font: { size: 10, weight: 'bold' } },
+                ticks: { maxTicksLimit: 8, font: { size: 10 } },
+                grid: { display: false }
               },
               y: {
                 display: true,
-                title: { display: true, text: isDigital ? "Decimal Output" : "Voltage (V)" },
+                title: { display: true, text: isDigital ? "Decimal Output" : "Voltage (V)", font: { size: 10, weight: 'bold' } },
                 beginAtZero: true,
-                // If digital, ensure y-axis uses whole numbers
-                ticks: isDigital ? { stepSize: 1, precision: 0 } : {},
+                ticks: {
+                    font: { size: 10 },
+                    ...(isDigital ? { stepSize: 1, precision: 0 } : {})
+                }
               },
             },
           }}
@@ -122,25 +126,26 @@ export default function SampleSolution({ problem }) {
               {
                 label: "Gold Standard",
                 data: solOutData,
-                borderColor: isDigital ? "rgb(59, 130, 246)" : "rgb(34, 197, 94)",
-                borderWidth: 2.5,
+                borderColor: isDigital ? "#3b82f6" : "#22c55e",
+                borderWidth: 3,
                 pointRadius: isDigital ? 4 : 0,
-                // CRITICAL: Use stepped line for digital logic
-                stepped: isDigital ? true : false,
-                tension: isDigital ? 0 : 0.1,
-                fill: isDigital ? { target: 'origin', above: 'rgba(59, 130, 246, 0.05)' } : false,
+                stepped: isDigital,
+                tension: 0,
+                fill: isDigital ? { target: 'origin', above: 'rgba(59, 130, 246, 0.03)' } : false,
               },
             ],
           }}
         />
       </div>
       
-      <p className="text-xs text-gray-400 italic">
-        {isDigital 
-          ? `* Logic analyzer showing ${solOutData.length} clock-synchronized states.`
-          : `* Graph displays output voltage over a total duration of ${(solOutData.length * dt * 1000).toFixed(2)} ms.`
-        }
-      </p>
+      <div className="p-3 bg-base-50 rounded-lg border border-base-200">
+        <p className="text-[10px] text-gray-500 leading-relaxed uppercase font-bold tracking-tight">
+          {isDigital 
+            ? `* Reference sequence for the first ${solOutData.length} cycles.`
+            : `* Showing the ideal voltage response with no external load (Open Circuit).`
+          }
+        </p>
+      </div>
     </div>
   );
 }

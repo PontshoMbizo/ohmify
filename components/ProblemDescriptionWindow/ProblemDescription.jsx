@@ -46,18 +46,18 @@ export default function ProblemDescription({ problem }) {
 
       {/* RENDER MARKDOWN DESCRIPTION */}
       <div className="prose prose-slate max-w-none prose-headings:font-black prose-headings:uppercase prose-headings:tracking-tight prose-code:text-blue-600 prose-pre:bg-gray-900 prose-pre:text-gray-100">
-      {/* <ReactMarkdown 
+      <ReactMarkdown 
           remarkPlugins={[remarkGfm, remarkMath]} 
           rehypePlugins={[rehypeKatex]}
         >
           {problem.description}
-        </ReactMarkdown> */}
+        </ReactMarkdown>
 
-                <ReactMarkdown 
+                {/* <ReactMarkdown 
           remarkPlugins={[remarkGfm, remarkMath]} 
         >
           {problem.description}
-        </ReactMarkdown>
+        </ReactMarkdown> */}
       </div>
 
       {/* Render examples dynamically (if they exist) */}

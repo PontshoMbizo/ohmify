@@ -2,7 +2,7 @@ import React from "react";
 
 export default function Body() {
   return (
-    <section className="py-10">
+    <section className="">
       <div className="mx-auto flex max-w-7xl flex-col items-center gap-16 px-6 lg:flex-row">
         
         {/* Waitlist Card */}
