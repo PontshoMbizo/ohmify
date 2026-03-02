@@ -22,31 +22,31 @@ This README documents the project architecture in a hierarchical way: a high-lev
 
 High-level architecture (services and major responsibilities):
 
-```mermaid
+  ```mermaid
 flowchart LR
-  Browser -->|Next.js pages| NextApp[Next.js (app/) frontend]
-  NextApp -->|uses| Firebase[Firebase (Auth + Firestore)]
-  NextApp -->|embeds| CircuitJS[CircuitJS iframe (public/circuitAPI/)]
-  CircuitJS -->|exports| Waveforms[Waveform CSV / samples]
-  Firebase -->|stores| Firestore[Collections: Problems, Users, UserProgress]
-  NextApp -->|renders| UI[Components (Navbar, ProblemList, Simulator, Grader)]
+  Browser -->|Next.js pages| NextApp[NextJS App Frontend]
+  NextApp -->|uses| Firebase[Firebase Auth and Firestore]
+  NextApp -->|embeds| CircuitJS[CircuitJS iframe]
+  CircuitJS -->|exports| Waveforms[Waveform CSV samples]
+  Firebase -->|stores| Firestore[Problems Users UserProgress]
+  NextApp -->|renders| UI[Navbar ProblemList Simulator Grader]
 
   style NextApp fill:#f0f9ff,stroke:#67c4ff
   style Firebase fill:#fff4f0,stroke:#ffb37a
   style CircuitJS fill:#f6fff0,stroke:#b7e17a
-```
+  ```
 
 Route → Component map (simplified):
 
 ```mermaid
 flowchart LR
-  subgraph App_Routes[app/ routes]
-    A[/ (Landing)\napp/page.js] -->|uses| Navbar[components/Navbar.jsx]
-    B[/problem\napp/problem/page.js] -->|renders| ProblemList[components/ProblemList.jsx]
-    C[/problem/:id\napp/problem/[id]/page.js] -->|renders| ProblemWindow[components/ProblemDescriptionWindow/ProblemWindow.jsx]
-    C -->|renders| SolveProblem[components/SimulationWindow/SolveProblem.jsx]
-    D[/create\napp/create/page.js] -->|renders| CreateProblem[components/CreateProblemWindow/CreateProblem.jsx]
-    E[/admin\napp/admin/page.js] -->|renders| ComingSoon[components/ComingSoonPage/ComingSoon.jsx]
+  subgraph AppRoutes
+    A[Landing page] --> Navbar[Navbar component]
+    B[Problem list page] --> ProblemList[ProblemList component]
+    C[Problem detail page] --> ProblemWindow[ProblemWindow component]
+    C --> SolveProblem[SolveProblem component]
+    D[Create page] --> CreateProblem[CreateProblem component]
+    E[Admin page] --> ComingSoon[ComingSoon component]
   end
 ```
 
@@ -54,15 +54,12 @@ Data model (core Firestore collections and typical document layout):
 
 ```mermaid
 flowchart TD
-  Problems[Problems collection]
-  Users[Users collection]
-  UserProgress[UserProgress collection]
+  Problems --> ProblemDoc
+  ProblemDoc --> InitialCircuit
+  ProblemDoc --> SolutionWaveform
 
-  Problems -->|doc| ProblemDoc[Problems/{problemId}]
-  ProblemDoc -->|sub| InitialCircuit[initialCircuit/data]
-  ProblemDoc -->|sub| SolutionWaveform[solutionWaveform/{id}]
-  Users -->|doc| UserDoc[Users/{uid}]
-  UserProgress -->|doc| ProgressDoc[UserProgress/{id}]
+  Users --> UserDoc
+  UserProgress --> ProgressDoc
 
   style Problems fill:#fff7e6
   style Users fill:#fff7e6
