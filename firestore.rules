@@ -1,0 +1,69 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Public reading of problems and associated public subcollections
+    match /Problems/{problemId} {
+      allow read: if true;
+      // Writes (create/update/delete) restricted to admins or creators
+      allow create, update, delete: if isAdmin() || isCreator();
+
+      match /initialCircuit/{docId} {
+        allow read: if true;
+        allow write: if isOwnerOfProblem(problemId) || isAdmin() || isCreator();
+      }
+
+      match /solutionWaveform/{docId} {
+        allow read: if true;
+        // Only admins/creators (problem owners) can update golden solutions
+        allow create, update, delete: if isOwnerOfProblem(problemId) || isAdmin();
+      }
+    }
+
+    // Users collection: users may read their own document and write some profile fields
+    match /Users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid; // user can read own profile
+      allow update: if request.auth != null && request.auth.uid == uid; // user can update own profile
+      allow create: if request.auth != null && request.auth.uid == uid; // allow initial creation
+      // Admins can read all user docs
+      allow read: if isAdmin();
+    }
+
+    // UserProgress: user can create/update their own progress; admins can read all
+    match /UserProgress/{progressId} {
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // Optional Submissions collection recommendation
+    match /Submissions/{submissionId} {
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // Helpers
+    function isAdmin() {
+      return request.auth != null && (
+        // Prefer custom claims if available
+        (request.auth.token.role != null && request.auth.token.role == 'admin') ||
+        // Fallback: read the Users doc (costly for large scale)
+        (get(/databases/$(database)/documents/Users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    function isCreator() {
+      return request.auth != null && (
+        (request.auth.token.role != null && request.auth.token.role == 'creator') ||
+        (get(/databases/$(database)/documents/Users/$(request.auth.uid)).data.role == 'creator')
+      );
+    }
+
+    function isOwnerOfProblem(problemId) {
+      // The Problems doc is expected to include `creatorId` (uid)
+      return request.auth != null && get(/databases/$(database)/documents/Problems/$(problemId)).data.creatorId == request.auth.uid;
+    }
+  }
+}

@@ -2,7 +2,7 @@ export default function MetadataSection({ problem, updateProblem, onNext }) {
   return (
     <section id="section-1" className="relative flex h-screen w-full flex-col items-center bg-base-100 shrink-0 px-4">
       <div className="flex w-full max-w-3xl flex-col gap-3">
-        <h2 className="text-3xl mt-12 font-black text-green-600 uppercase tracking-tighter">01. Problem Metadata</h2>
+        <h2 className="text-3xl mt-12 font-black text-green-600 uppercase tracking-tighter">Problem Metadata</h2>
         <input 
           type="text" 
           value={problem.title}
@@ -13,7 +13,7 @@ export default function MetadataSection({ problem, updateProblem, onNext }) {
         <textarea 
           value={problem.description}
           placeholder="Description..." 
-          className="h-48 w-full rounded-xl border border-base-300 p-6 text-lg shadow-inner bg-white outline-none focus:ring-2 focus:ring-blue-500/20" 
+          className="h-[calc(60vh)] w-full rounded-xl border border-base-300 p-6 text-lg shadow-inner bg-white outline-none focus:ring-2 focus:ring-blue-500/20" 
           onChange={(e) => updateProblem({ description: e.target.value })} 
         />
         <div className="flex gap-4">
@@ -37,7 +37,7 @@ export default function MetadataSection({ problem, updateProblem, onNext }) {
             </div>
         </div>
       </div>
-      <button onClick={onNext} className="absolute bottom-18 right-12 btn btn-primary btn-lg rounded-full px-10 shadow-xl">Next Step</button>
+      <button onClick={onNext} className="absolute bottom-18 right-12 btn btn-primary btn-lg rounded-full px-6 shadow-xl">Next Step</button>
     </section>
   );
 }

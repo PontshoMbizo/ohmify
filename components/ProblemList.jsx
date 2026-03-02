@@ -5,7 +5,10 @@ import { useState } from "react";
 import LoadingAnimation from "./LoadingAnimation";
 import { GeneralUtils } from "@/lib/GeneralUtils";
 
-export default function ProblemList({ allProblems, isLoading }) {
+/**
+ * ProblemList now receives completedIds as a prop from ProblemPage
+ */
+export default function ProblemList({ allProblems, isLoading, completedIds = new Set() }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [selectedTopic, setSelectedTopic] = useState("All");
 
@@ -25,6 +28,7 @@ export default function ProblemList({ allProblems, isLoading }) {
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-4">
+      {/* Topic Filter Bar */}
       <div className="flex mt-4">
         <div className={`flex flex-wrap items-center gap-2 p-1 transition-all duration-300 overflow-hidden mt-4 ${isExpanded ? "h-auto" : "h-8"}`}>
           {tags.map(tag => (
@@ -36,7 +40,7 @@ export default function ProblemList({ allProblems, isLoading }) {
               >
                 {tag}
               </button>
-              <span className="ml-1 px-1.5 py-0.5 rounded-full bg-gray-100 text-[10px] text-gray-400">
+              <span className="px-1.5 py-0.5 rounded-full bg-gray-100 text-[10px] text-gray-400">
                 {tag === "All" ? allProblems.length : allProblems.filter(p => p.topics?.includes(tag)).length}
               </span>
             </div>
@@ -50,22 +54,41 @@ export default function ProblemList({ allProblems, isLoading }) {
         </button>
       </div>
 
+      {/* Problem Navigation Menu */}
       <ul className="menu bg-base-100 rounded-box w-[90%]">
-        {filtered.map((p) => (
-          <li key={p.id} className="border-b border-base-200 last:border-none">
-            <label className="flex items-center gap-4 py-3 hover:bg-base-200 transition-colors">
-              <Link className="flex-1 font-semibold px-4" href={`/problem/${p.id}`}>
-                {p.title}
-              </Link>
-              <span className="hidden md:inline text-xs px-2 py-1 rounded opacity-60">
-                {Array.isArray(p.topics) ? p.topics[0] : p.topics}
-              </span>
-              <span className={`${diffColor(p.difficulty)} font-medium w-20 text-right`}>
-                {p.difficulty}
-              </span>
-            </label>
-          </li>
-        ))}
+        {filtered.map((p) => {
+          // Identify completion status using the passed Set
+          const isDone = completedIds.has(p.id); 
+
+          return (
+            <li key={p.id} className="border-b border-base-200 last:border-none">
+              <label className="flex items-center gap-4 py-3 hover:bg-base-200 transition-colors px-4">
+                {/* STATUS INDICATOR: Gray circle or Green checkmark */}
+                <div className="flex shrink-0 w-6 justify-center">
+                  {isDone ? (
+                    <div className="bg-green-500 rounded-full p-0.5 animate-in zoom-in duration-300">
+                      <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                  ) : (
+                    <div className="w-2 h-2 rounded-full bg-gray-200" />
+                  )}
+                </div>
+
+                <Link className="flex-1 font-semibold" href={`/problem/${p.id}`}>
+                  {p.title}
+                </Link>
+                <span className="hidden md:inline text-xs px-2 py-1 rounded opacity-60">
+                  {Array.isArray(p.topics) ? p.topics[0] : p.topics}
+                </span>
+                <span className={`${diffColor(p.difficulty)} font-medium w-20 text-right`}>
+                  {p.difficulty}
+                </span>
+              </label>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

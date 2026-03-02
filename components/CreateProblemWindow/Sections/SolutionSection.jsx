@@ -1,7 +1,6 @@
 "use client";
 
 import Simulator from "@/components/Simulator";
-import { GeneralUtils } from "@/lib/GeneralUtils";
 import { db } from "@/lib/firebase";
 import { collection, addDoc, doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useState } from "react";
@@ -31,7 +30,7 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
       ? capturedData.table.map(row => row.decimalOutput).join("\n")
       : (capturedData.data?.output || []).join("\n");
 
-    // For 'signal' type, we always save to test1 and treat it as the only solution
+    // For 'signal' type, we always save to test1
     const targetKey = problemType === "signal" ? "test1" : activeTest;
 
     updateProblem({
@@ -43,12 +42,11 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
   };
 
   /**
-   * Publishes the problem using the separate-document strategy.
+   * Publishes the problem to Firestore
    */
   const finalizeProblem = async () => {
     if (!user) return alert("Sign in required.");
     
-    // Validation logic based on type
     const { test1, test2, test3 } = problem.solutions;
     if (problemType === "signal" && !test1) return alert("Capture the signal waveform first.");
     if (problemType !== "signal" && (!test1 || !test2 || !test3)) return alert("Capture all 3 cases first.");
@@ -56,7 +54,7 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
     setIsPublishing(true);
 
     try {
-      // 1. Prepare Metadata
+      // 1. Prepare Metadata based on Test Type
       let testbench = {};
       if (problemType === "digital") {
         testbench = {
@@ -71,7 +69,6 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
           minload: Number(problem.testConfig?.rMin || 0)
         };
       } else {
-        // Signal Test type metadata
         testbench = { isSignal: true };
       }
 
@@ -84,7 +81,7 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
         creatorName: user.displayName || "Anonymous",
         createdAt: serverTimestamp(),
         testbench,
-        testType: problemType, // Storing the new tri-state type
+        testType: problemType,
         timeStep: problem.timeStep,
         sampleCount: problem.sampleCount
       };
@@ -97,7 +94,7 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
         payload: problem.templateCircuit
       });
 
-      // 3. Save solutions
+      // 3. Save solutions sub-collection
       const sampleRate = 1 / Number(problem.timeStep);
       const tests = problemType === "signal" ? { test1 } : { test1, test2, test3 };
 
@@ -119,7 +116,7 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
 
   return (
     <section id="section-4" className="relative flex h-screen w-full shrink-0 bg-white">
-      {/* SIMULATOR */}
+      {/* LEFT: SIMULATOR VIEWPORT */}
       <div className="w-[70%] h-full bg-base-100">
         <Simulator 
           circuit={problem.templateCircuit} 
@@ -129,33 +126,41 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
         />
       </div>
 
-      {/* SIDEBAR CONTROLS */}
-      <div className="w-[30%] h-full p-8 flex flex-col gap-6 border-l bg-base-50 overflow-y-auto text-black">
+      {/* RIGHT: SIDEBAR CONTROLS */}
+      <div className="w-[30%] h-full p-8 flex flex-col gap-6 border-l bg-slate-50 overflow-y-auto text-black shadow-inner">
         <div>
           <h2 className="text-2xl font-black uppercase italic text-blue-600 tracking-tighter">04. Solution Suite</h2>
-          <p className="text-[10px] opacity-60 uppercase font-bold tracking-widest text-gray-400">
+          <p className="text-[10px] opacity-60 uppercase font-bold tracking-widest text-slate-400">
             {problemType} mode
           </p>
         </div>
 
         {/* DYNAMIC METADATA INPUTS */}
         {problemType !== "signal" && (
-          <div className="grid grid-cols-1 gap-3 p-4 bg-white border rounded-2xl shadow-sm">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">
-              {problemType === "digital" ? "Data Payloads" : "Testbench Loads (Ohms)"}
+          <div className="grid grid-cols-1 gap-4 p-4 bg-white border border-slate-200 rounded-2xl shadow-sm">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+              {problemType === "digital" ? "Memory Payloads (SRAM Map)" : "Testbench Loads (Ohms)"}
             </p>
             
             {problemType === "digital" ? (
-              <>
-                <input type="text" placeholder="Payload A" className="input input-bordered input-sm w-full font-mono" 
-                  value={problem.testConfig?.payload1 || ""} onChange={(e) => handleBenchChange("payload1", e.target.value)} />
-                <input type="text" placeholder="Payload B" className="input input-bordered input-sm w-full font-mono" 
-                  value={problem.testConfig?.payload2 || ""} onChange={(e) => handleBenchChange("payload2", e.target.value)} />
-                <input type="text" placeholder="Payload C" className="input input-bordered input-sm w-full font-mono" 
-                  value={problem.testConfig?.payload3 || ""} onChange={(e) => handleBenchChange("payload3", e.target.value)} />
-              </>
+              <div className="space-y-3">
+                {/* Textareas for address-indexed multi-line data */}
+                {["payload1", "payload2", "payload3"].map((key, i) => (
+                  <div key={key} className="form-control">
+                    <label className="label py-0">
+                      <span className="label-text text-[9px] font-bold uppercase opacity-50">Payload {String.fromCharCode(65 + i)}</span>
+                    </label>
+                    <textarea 
+                      placeholder={"0: 0 17 33...\n8: 110 120..."}
+                      className="textarea textarea-bordered textarea-xs w-full font-mono h-24 text-[10px] leading-relaxed bg-slate-900 text-blue-300 border-slate-800" 
+                      value={problem.testConfig?.[key] || ""} 
+                      onChange={(e) => handleBenchChange(key, e.target.value)} 
+                    />
+                  </div>
+                ))}
+              </div>
             ) : (
-              <>
+              <div className="space-y-3">
                 <div className="form-control">
                   <label className="label py-0"><span className="label-text text-[9px] font-bold uppercase opacity-50">Max Load (Ω)</span></label>
                   <input type="number" className="input input-bordered input-sm w-full font-mono" 
@@ -166,50 +171,56 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
                   <input type="number" className="input input-bordered input-sm w-full font-mono" 
                     value={problem.testConfig?.rMin || ""} onChange={(e) => handleBenchChange("rMin", e.target.value)} />
                 </div>
-              </>
+              </div>
             )}
           </div>
         )}
 
-        {/* TEST SELECTOR - ONLY FOR MULTI-TEST MODES */}
+        {/* TEST SELECTOR TABS */}
         {problemType !== "signal" ? (
-          <div className="tabs tabs-boxed bg-base-200 p-1">
+          <div className="tabs tabs-boxed bg-slate-200 p-1 rounded-xl">
             {[
               { id: "test1", label: problemType === "digital" ? "Test A" : "No Load" },
               { id: "test2", label: problemType === "digital" ? "Test B" : "Max Load" },
               { id: "test3", label: problemType === "digital" ? "Test C" : "Min Load" }
             ].map(t => (
-              <button key={t.id} onClick={() => setActiveTest(t.id)}
-                className={`tab flex-1 font-bold transition-all ${activeTest === t.id ? "tab-active bg-blue-600 text-white" : ""}`}>
+              <button 
+                key={t.id} 
+                onClick={() => setActiveTest(t.id)}
+                className={`tab flex-1 font-black uppercase text-[10px] transition-all rounded-lg ${activeTest === t.id ? "tab-active bg-blue-600 text-white shadow-md" : "text-slate-500"}`}
+              >
                 {problem.solutions[t.id] ? "✓ " : ""}{t.label}
               </button>
             ))}
           </div>
         ) : (
-          <div className="p-4 bg-blue-600 text-white rounded-2xl shadow-lg">
+          <div className="p-4 bg-blue-600 text-white rounded-2xl shadow-lg animate-pulse">
             <p className="text-xs font-black uppercase tracking-widest opacity-80 mb-1">Signal Capture Mode</p>
             <p className="text-sm font-bold">{problem.solutions.test1 ? "Waveform Captured ✓" : "Awaiting Capture..."}</p>
           </div>
         )}
 
-        {/* INSTRUCTION CARD */}
-        <div className="p-5 bg-white border rounded-2xl shadow-sm">
-          <p className="text-[11px] leading-relaxed text-gray-500 italic">
-            {problemType === "digital" && "Update simulator SRAM, then click 'Submit' in the simulator window."}
-            {problemType === "load" && "Match the Voltmeter resistance in the simulator to the values above, then click 'Submit'."}
-            {problemType === "signal" && "Ensure the circuit is configured for its primary function (clipping, filtering, etc.) and click 'Submit' to capture the gold standard."}
-          </p>
+        {/* DYNAMIC INSTRUCTION CARD */}
+        <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="h-2 w-2 rounded-full bg-amber-400 mt-1 shrink-0" />
+            <p className="text-[10px] leading-relaxed text-slate-500 font-medium italic">
+              {problemType === "digital" && "ACTION: Copy the payload above, paste into simulator SRAM, click RESET, then click SUBMIT in the simulator window."}
+              {problemType === "load" && "ACTION: Set Voltmeter resistance to match the values above, click RESET, then click SUBMIT."}
+              {problemType === "signal" && "ACTION: Capture the gold standard output for this circuit's primary logic function."}
+            </p>
+          </div>
         </div>
 
         {/* FOOTER ACTIONS */}
-        <div className="mt-auto space-y-3 pt-6 border-t">
-          <button onClick={onBack} className="btn btn-ghost w-full btn-sm opacity-50 uppercase">Back</button>
+        <div className="mt-auto space-y-3 pt-6 border-t border-slate-200">
+          <button onClick={onBack} className="btn btn-ghost w-full btn-sm opacity-50 uppercase font-black tracking-widest">Back</button>
           <button 
             disabled={isPublishing || (problemType === "signal" ? !problem.solutions.test1 : !problem.solutions.test3)} 
             onClick={finalizeProblem} 
-            className="btn btn-primary w-full shadow-lg font-black uppercase tracking-widest"
+            className="btn btn-primary w-full shadow-xl font-black uppercase tracking-widest bg-blue-600 border-none hover:bg-blue-700"
           >
-            {isPublishing ? <span className="loading loading-spinner"></span> : "Publish Problem"}
+            {isPublishing ? <span className="loading loading-spinner"></span> : "Publish Challenge"}
           </button>
         </div>
       </div>

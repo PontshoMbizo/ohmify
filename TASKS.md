@@ -1,30 +1,52 @@
-# Tasks to-do
+Here is your updated **task.md**. I have reorganized it to reflect the current state of the project, marking finished items as "DONE" and adding the new requirements for SRAM payloads, completion logic, and Firestore integration we just developed.
 
-## 1. (2025/12/2022) Create problem page
-- created normal data collection fields and simulator instances.
+---
 
-- need to use export circuit 
-- need to collect simulation data at the end
-- need to connect to the database
+# Tasks to-do (Updated 2026-02-28)
 
-## 2. Automarker
+## 1. Create Problem Page
 
-- check sampler integrity (does it sample correctly?) : the test failed, the sample frequency is not enough ![alt text](image.png)
-- use the data export functionality (for now)
--NB: find a way to store large simulation files
+* Created normal data collection fields and simulator instances.
+* **DONE**: Use export circuit to save templates.
+* **DONE**: Collect simulation data at the end (captured as newline-separated strings).
+* **DONE**: Connect to Firestore database (Problems collection + solutionWaveform sub-collection).
 
-#### categorize problems and ways to verify the solutions:
+## 2. Automarker & Verification
 
-- Power Electronics and wave-shaping
-    - compare the time domain waveforms using standard deviation
-    DONE
-    - note to self, only change the sample time when you are sampling, it hinders the simulation process...   
+* **DONE**: Check sampler integrity (Ensured sampleCount and timeStep are configurable).
+* **DONE**: Categorize problems into three distinct validation modes: `Load`, `Signal`, and `Digital`.
+* **NB**: Storing large simulation files as text strings in Firestore sub-collections.
 
-- Frequency Domain Problems (Audio, Controls...)
+#### Verification Methods:
 
-- Digital Systems/Electronics
-    - sample an array of input [I0, I1, ..., In], an array of outputs [O0, O1, ..., On] based on a universal clock [clk] used for synchronization
-    - create a table from the sampled data that'll be used as the golden standard:
-    |input->cat(I0, I1, ..., In)|output->cat(O0, O1, ..., On)| 
-    - from this table, plot a logic analyzer graph with the logic levels on the y-axis and the clock pulse count on the x-axis (time)
+* **Power Electronics & Wave-shaping (`load`)**:
+* Compare time-domain waveforms using Normalized RMSE.
+* **DONE**: Testbench loads (No-load, Max, Min) correctly trigger three distinct captures.
 
+
+* **Frequency Domain & DSP (`signal`)**:
+* **DONE**: Single-test capture for complex waveshaping.
+* Implement Bode plot comparisons (Magnitude/Phase) side-by-side in Results.
+
+
+* **Digital Systems/Electronics (`digital`)**:
+* **DONE**: Sample logic transitions based on decimal output of labeled nodes.
+* **DONE**: Create a "Golden Standard" table from address-indexed SRAM maps.
+* **DONE**: Plot logic analyzer graphs (stepped lines) on the X-axis (Cycles).
+
+
+
+## 3. User Experience & Persistence (NEW)
+
+* **DONE**: Implement `DigitalDataBlock` for SRAM payload copy-pasting.
+* **DONE**: Separate technical payloads from the markdown description.
+* **DONE**: Add "Jump to Payloads" anchor link logic.
+* **DONE**: Create `completedProblems` array on the User document.
+* **DONE**: Mark problem as complete in Firestore when all test cases pass.
+* **DONE**: Display completion checkmarks in `ProblemList` based on `completedIds` prop.
+
+## 4. Pending / Next Steps
+
+* Finalize `gradeDigital` bit-packing comparison logic.
+* Add SRAM payload format validation in Creator Studio.
+* Implement "Global Progress" stats in the `Drawer` or Navbar.

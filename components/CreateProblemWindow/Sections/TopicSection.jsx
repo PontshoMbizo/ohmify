@@ -48,7 +48,7 @@ export default function TopicSection({ problem, updateProblem, onNext, onBack })
       {/* Back Button */}
       <button 
         onClick={onBack} 
-        className="absolute top-8 left-12 btn btn-ghost p-2 opacity-50 hover:opacity-100 transition-opacity"
+        className="absolute top-8 left-12 btn btn-ghost p-1 text-green-600 hover:opacity-100"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <rect width="18" height="18" x="3" y="3" rx="2"/><path d="m12 8-4 4 4 4"/><path d="M16 12H8"/>
@@ -60,9 +60,7 @@ export default function TopicSection({ problem, updateProblem, onNext, onBack })
           {/* TOPIC SELECTION */}
           <div className="space-y-4">
             <div>
-              <h2 className="text-3xl font-black text-blue-600 mb-1 uppercase tracking-tighter">
-                02. Engineering Domain
-              </h2>
+              <h2 className="text-3xl mt-12 font-black text-green-600 uppercase tracking-tighter">Problem Type</h2>
               <p className="text-sm opacity-60 font-medium">
                 Select up to 2 categories for this challenge.
               </p>
