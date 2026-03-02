@@ -160,7 +160,3 @@ npm run dev
 - Inspect `components/SimulationWindow/SolveProblem.jsx` and `components/Simulator.jsx` to summarize grading logic in detail.
 - Generate a visual file tree or interactive route map for the repo.
 - Create a small CONTRIBUTING.md with local test instructions and Firestore rules suggestions.
-
----
-
-If you want, I can now open and summarize `components/SimulationWindow/SolveProblem.jsx` and `components/Simulator.jsx` to show exactly how grading is implemented.
