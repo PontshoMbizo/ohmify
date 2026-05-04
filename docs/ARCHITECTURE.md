@@ -1,321 +1,258 @@
 # Ohmify — ARCHITECTURE
 
-This document describes the CircuitJS integration contract, the grading pipeline end-to-end, recommended Firestore security rules (no rules file present in repo), the role model, and the distinction between `UserProgress` and `Submissions` (what is stored today and recommended changes).
+This document covers the CircuitJS integration contract, the grading pipeline end-to-end, Firestore data model, the role model, and the distinction between `UserProgress` and `Submissions`.
 
 ---
 
-## 1) CircuitJS integration contract (the black box)
+## 1) CircuitJS integration contract
 
-Overview
-- The app embeds a locally-hosted CircuitJS runtime at `/public/circuitAPI/circuitjs.html` inside an `<iframe>`.
-- Integration is NOT based on `window.postMessage` in the current code; instead the parent page expects the iframe to expose a global `CircuitJS1` object on `iframe.contentWindow` and calls its API directly.
+**Overview**
 
-Where this happens
-- `components/Simulator.jsx` obtains the simulator instance with:
+The app embeds a locally-hosted CircuitJS runtime at `/public/circuitAPI/circuitjs.html` inside an `<iframe>`. Integration is via direct property access on the iframe's `contentWindow` — not `postMessage`. The iframe must be same-origin (served from `public/`).
 
-  - `const sim = iframeRef.current?.contentWindow?.CircuitJS1 || null`
-
-Methods and properties the app uses (contract surface)
-- `sim.importCircuit(circuitString, false)` — import a netlist/payload string into the simulator.
-- `sim.setSimRunning(boolean)` — start/stop the simulator.
-- `sim.getTime()` — current sim time.
-- `sim.getTimeStep()` — simulation timestep (seconds).
-- `sim.getElements()` — returns element objects; used to discover voltmeters, labeled nodes, clock generator etc.
-- `element.getInfo()` — returns descriptive array used to identify element type (e.g. detects "voltmeter" or "square wave gen").
-- `element.getType()` and `element.getLabelName()` — used to find labeled nodes such as `Input0`, `Output0`, or named nodes like `clk` and `input`.
-- `voltmeter.getVoltageDiff()`, `voltmeter.getCurrent()` — used by analog capture to read instantaneous V and I.
-- `sim.getNodeVoltage(name)` — read node voltage for digital packing and clock detection.
-- `sim.ontimestep` — set to a function that will be called on each simulation timestep; `samplingUtils` sets this to collect samples.
-- `sim.exportCircuit()` — returns the current netlist string (used to save user drafts).
-
-Netlist / payload format
-- The netlist is treated as an opaque string by the app (stored as `payload` in Firestore initialCircuit/doc). The app does not parse the netlist itself; it passes the string straight to `sim.importCircuit()`.
-- Practically this is the Falstad/CircuitJS textual netlist format (plain text lines describing devices and node labels). The app relies on the simulator to interpret it.
-- Storage:
-  - Problem initial circuits are read from `Problems/{id}/initialCircuit/data` where the document has a `payload` field (string).
-  - When the simulator exports the user's circuit, `sim.exportCircuit()` is called and the returned string saved to localStorage (draft) in current implementation; it is not automatically written to Firestore.
-
-How samples are extracted
-- The parent sets `sim.ontimestep = () => { ... }`. Inside that callback the sampling functions call simulator element APIs to read voltages/currents each timestep.
-- Two capture modes implemented in `lib/samplingUtils.js`:
-  - Analog (`captureAnalog`): discovers a voltmeter element and (optionally) an `input` labeled node. On each timestep reads `voltmeter.getVoltageDiff()` and `sim.getNodeVoltage('input')` and pushes samples into buffers until `numSamples` is reached. When done it clears `sim.ontimestep`, stops the simulator via `sim.setSimRunning(false)`, and resolves a structure with samples, final metrics, `timeStep`, `sampleRate`, and `timeLabels`.
-  - Digital (`captureDigital`): discovers labelled input/output nodes and a `clk` node. On each timestep it monitors `sim.getNodeVoltage('clk')` and detects rising edges (lastClk 0 -> 1). On each rising edge it packs inputs/outputs into integer words and records a `history` row. After `numCycles` cycles it resolves with a `table` containing cycle rows.
-
-What "deterministic sampling" means here
-- Deterministic sampling in this implementation is achieved by:
-  1. Setting the simulator to a known initial state (`sim.setSimRunning(false)` / reset), ensuring the user is instructed to reset to 0ms before running capture.
-  2. Using the simulator's internal timestep (`sim.getTimeStep()`) and the `sim.ontimestep` callback to sample at each discrete simulator step rather than trying to sample asynchronous wall-clock time.
-  3. For digital captures, sampling is synchronized to a discovered clock node by observing node voltage transitions (edge detection) rather than relying on external timers.
-- The net effect: samples are taken at consistent simulation timesteps or on deterministic clock edges, so repeated captures from the same netlist + simulator settings produce identical sample sequences (assuming deterministic simulator behavior).
-
-Limitations & contract risks
-- This approach requires `CircuitJS1` to be present on `contentWindow` and the iframe page must not violate browser cross-origin rules. It only works when `circuitjs.html` is served from the same origin (true here under `public/`).
-- If the simulator changes its API (method names or element object shapes), the parent code will break.
-- There is no explicit message-based handshake; a robust integration could add a `postMessage` handshake and explicit ready/health messages.
-
-
----
-
-## 2) Grading pipeline — end-to-end (what happens when the user clicks "Submit")
-
-High level steps
-1. User clicks `Submit` in the simulator UI (the visible button in `components/Simulator.jsx`).
-2. `Simulator.jsx` runs `handleInternalSubmit()`:
-   - It gets `sim = iframe.contentWindow.CircuitJS1`.
-   - If `mode === 'export'`, calls `onSubmit(null, sim)` and returns (export-only).
-   - Checks `sim.getTime()` and requires simulator to be at 0ms (asks user to reset otherwise) — this enforces deterministic starting point.
-   - Discovers digital/analog measurement elements (voltmeters, labelled nodes, clock element) using element `getInfo()` / `getType()` / `getLabelName()`.
-   - Starts the simulator via `sim.setSimRunning(true)` and calls the appropriate capture function in `samplingUtils`:
-     - `captureAnalog(sim, { numSamples })` → samples until `numSamples`, then resolves object with `type: 'analog'`, `data: {output:[], input:[]}`, `metrics`, `timeStep`, `sampleRate`, `timeLabels`.
-     - `captureDigital(sim, { inputs, outputs, numCycles })` → captures on clock rising edges and resolves `{ type: 'digital', table, totalCycles, timeStep }`.
-   - After capture resolves, `Simulator` invokes `onSubmit(capturedData, sim)`.
-
-3. `SolveProblem.jsx` receives `handleSimSubmit(capturedData, sim)`:
-   - If `sim && typeof sim.exportCircuit === 'function'`, calls `sim.exportCircuit()` and saves exported netlist string to localStorage as a draft for the current `problemId`.
-   - Stores `capturedData` into local `simResults` state.
-
-4. `SolveProblem` renders `AutoMarker` and passes `capturedData`, the `solution` payload (golden waveform strings fetched earlier from Firestore), project `topics`, `testbench`, and `testType`.
-
-5. `AutoMarker.jsx` receives `capturedData` and triggers one of three pipelines depending on `testType`:
-   - `digital`: calls `processDigital(userTable, testKey)`:
-     - Parses the stored golden solution CSV/text into `goldenTable` where each line is `decimalOutput`.
-     - Calls `gradingUtils.gradeDigital(userTable, goldenTable)` which compares cycle-by-cycle and returns `matchRatio`, `details`, `totalCycles`, `correctCount`.
-     - Calls `gradingUtils.getVerdict(matchRatio, topics, true)` to get `{ passed, score, message }`.
-     - Writes a per-test entry into `testSuite[testKey]` state with table details and the `verdict`.
-   - `load` (analog triple-test): calls `processLoad(userVout, userVin, timeLabels, sampleRate, testKey)`:
-     - Extracts numeric data lines from the stored golden solution string (helper `extractDataPoints`).
-     - Calculates `nrmse = gradingUtils.calculateNormalizedRMSE(userVout, solOutData)`.
-     - Calls `gradingUtils.getVerdict(nrmse, topics, false)` to get verdict and score.
-     - Runs spectral analysis with `signalUtils.getFrequencyData(...)` to produce bode/spectrum data for display.
-     - Writes the result into `testSuite[testKey]`.
-   - `signal`: similar to `load` but only one test (`test1`) and different UI.
-
-6. `AutoMarker` updates the `testSuite` state in `SolveProblem`. A `useEffect` in `SolveProblem` watches `testSuite` and calls `handleMarkAsComplete()` if either the multi-test or single-test criteria are met:
-   - For `testType === 'signal'`: passing `test1` completes.
-   - For other types: passing `test1 && test2 && test3` completes.
-
-7. `handleMarkAsComplete()` persists lightweight progress into Firestore:
-   - It writes (merge) a document to `UserProgress` with id `${userId}_${problemId}` and fields:
-     ```json
-     {
-       "userId": "<uid>",
-       "problemId": "<problemId>",
-       "status": "completed",
-       "completedAt": <serverTimestamp>,
-       "score": 100
-     }
-     ```
-   - NOTE: Current implementation uses a placeholder `userId = "placeholder_user_id"`. Replace with real `useAuth().user.uid` when integrating auth.
-
-8. Presentation to user
-   - `AutoMarker` constructs a `verdict` object per test and the UI `Results` component renders charts, pass/fail badges, numeric score, and helpful diagnostics (N-RMSE, match ratio, Bode plots, etc.).
-   - The final, aggregated verdict can be computed with `gradingUtils.calculateFinalVerdict(testSuite, testType)` which returns `{ isAccepted, passCount, globalScore, statusMessage, ... }`.
-
-Data ownership and responsibilities
-- `Simulator.jsx` — owns simulator lifecycle, discovery of instrumentation, starts/stops sim, performs capture, and hands raw captured data (and `sim`) to parent via `onSubmit`.
-- `SolveProblem.jsx` — owns current circuit state, stores exported circuit draft (localStorage), receives capturedData and routes it to `AutoMarker`, manages testSuite state and persistence of `UserProgress` on completion.
-- `AutoMarker.jsx` — owns grading logic orchestration for the current session; invokes `gradingUtils` + `signalUtils` and updates `testSuite` entries (individual test verdicts and details).
-- `gradingUtils` + `signalUtils` + `samplingUtils` — pure helper modules that perform numeric analysis, grading heuristics, and sampling.
-
-Score / verdict data structure (what is produced in-memory)
-- Per-test entry (stored in `testSuite[testKey]`):
-  - `type`: "analog" | "digital"
-  - `verdict`: { `passed`: boolean, `score`: string (0-100), `message`: string, ... }
-  - `summary` (digital): { total, correct }
-  - `userData` / `solutionData` (analog arrays)
-  - `nrmse` or `matchRatio` included under `verdict` or top-level for convenience.
-
-- Aggregated suite verdict returned by `gradingUtils.calculateFinalVerdict(testSuite, testType)`:
-  ```json
-  {
-    "isAccepted": boolean,
-    "progress": number,
-    "requiredCount": number,
-    "passCount": number,
-    "globalScore": string, // percent as string
-    "statusMessage": string,
-    "isFullyComplete": boolean
-  }
-  ```
-
-Persistence today
-- Golden solutions: `Problems/{id}/solutionWaveform/{docId}` — each solution doc contains serialized `samples` (string or CSV-like) and `sampleRate` (number). These are read by `app/problem/[id]/page.js`.
-- Initial circuit: `Problems/{id}/initialCircuit/data` — document containing `{ payload: string }`.
-- User progress: `UserProgress/{userId}_{problemId}` — light doc written when user completes a challenge (see shape earlier).
-
-Limitations in current persistence
-- There is no `Submissions` collection capturing raw user submissions (captured waveform, exported netlist) in Firestore by default. Exports are saved to `localStorage` only. This makes reproducible grading audits or re-processing impossible server-side.
-
-Recommended addition for auditability
-- Add a `Submissions` collection (or `Problems/{id}/submissions`) where each submission document stores:
-  - `userId`, `problemId`, `capturedData` (or attachment to Cloud Storage), `exportedNetlist`, `sampleRate`, `createdAt`, `verdictSnapshot`.
-- Persist the submission right after `AutoMarker` finishes grading so you can re-run offline or tune heuristics.
-
-
----
-
-## 3) Firestore security rules (recommended)
-
-There is no `firestore.rules` present in the repository. Below are recommended rules that mirror the app's intended access model. These assume you store the user's role in `Users/{uid}.role` (e.g. `"user"`, `"creator"`, `"admin"`).
-
-Notes before applying rules
-- If you use Firebase custom claims for roles, adapt checks to `request.auth.token.role` instead of reading the `Users` document.
-- Reading the `Users` doc from rules (via `get()`) is possible but costs a document get charge on the rules engine — it's acceptable for small-scale but consider custom claims for large scale.
-
-Suggested `firestore.rules` content (copy into your Firebase console or `firestore.rules` file):
+**Simulator reference**
 
 ```js
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
+// components/Simulator.jsx
+const sim = iframeRef.current?.contentWindow?.CircuitJS1 || null
+```
 
-    // Public reading of problems and associated public subcollections
-    match /Problems/{problemId} {
-      allow read: if true;
-      // Writes (create/update/delete) restricted to admins or creators
-      allow create, update, delete: if isAdmin() || isCreator();
+**Contract surface — methods the app calls**
 
-      match /initialCircuit/{docId} {
-        allow read: if true;
-        allow write: if isOwnerOfProblem(problemId) || isAdmin() || isCreator();
-      }
+| Method | Used for |
+|---|---|
+| `sim.importCircuit(str, false)` | Load a netlist/payload string |
+| `sim.exportCircuit()` | Export current netlist (draft save) |
+| `sim.setSimRunning(bool)` | Start / stop simulation |
+| `sim.getTime()` | Current sim time (enforces 0ms start) |
+| `sim.getTimeStep()` | Simulation timestep in seconds |
+| `sim.getElements()` | Discover voltmeters, labelled nodes, clock |
+| `element.getInfo()` | Identify element type (voltmeter, square wave gen…) |
+| `element.getType()` / `element.getLabelName()` | Find `Input0`, `Output0`, `clk`, `input` nodes |
+| `voltmeter.getVoltageDiff()` | Read instantaneous voltage |
+| `voltmeter.getCurrent()` | Read instantaneous current |
+| `sim.getNodeVoltage(name)` | Read named node voltage |
+| `sim.ontimestep` | Set timestep callback for sampling |
 
-      match /solutionWaveform/{docId} {
-        allow read: if true;
-        // Only admins/creators (problem owners) can update golden solutions
-        allow create, update, delete: if isOwnerOfProblem(problemId) || isAdmin();
-      }
-    }
+**Netlist format**
 
-    // Users collection: users may read their own document and write some profile fields
-    match /Users/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid; // user can read own profile
-      allow update: if request.auth != null && request.auth.uid == uid; // user can update own profile
-      allow create: if request.auth != null && request.auth.uid == uid; // allow initial creation
-      // Admins can read all user docs
-      allow read: if isAdmin();
-    }
+The netlist is an opaque string (Falstad/CircuitJS plain-text format). The app passes it straight to `importCircuit()` without parsing.
 
-    // UserProgress: user can create/update their own progress; admins can read all
-    match /UserProgress/{progressId} {
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow update: if request.auth != null && resource.data.userId == request.auth.uid;
-      allow read: if request.auth != null && resource.data.userId == request.auth.uid || isAdmin();
-      allow delete: if isAdmin();
-    }
+Storage locations:
+- Initial circuit for a problem: `Problems/{id}/initialCircuit/data` → `{ payload: string }`
+- User draft circuit: `localStorage["draft_${problemId}"]` — written by `SolveProblem` on each submit
 
-    // Optional Submissions collection recommendation
-    match /Submissions/{submissionId} {
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read: if request.auth != null && resource.data.userId == request.auth.uid || isAdmin();
-      allow delete: if isAdmin();
-    }
+**Capture modes (`lib/samplingUtils.js`)**
 
-    // Helpers
-    function isAdmin() {
-      return request.auth != null && (
-        // Prefer custom claims if available
-        (request.auth.token.role != null && request.auth.token.role == 'admin') ||
-        // Fallback: read the Users doc (costly for large scale)
-        (get(/databases/$(database)/documents/Users/$(request.auth.uid)).data.role == 'admin')
-      );
-    }
+- `captureAnalog(sim, { numSamples })` — sets `sim.ontimestep`, reads `voltmeter.getVoltageDiff()` and `sim.getNodeVoltage('input')` each step until `numSamples` collected. Resolves `{ type:'analog', data:{output,input}, metrics, timeStep, sampleRate, timeLabels }`.
+- `captureDigital(sim, { inputs, outputs, numCycles })` — monitors `sim.getNodeVoltage('clk')` for rising edges. On each edge packs input/output node voltages into integer words. Resolves `{ type:'digital', table, totalCycles, timeStep }`.
 
-    function isCreator() {
-      return request.auth != null && (
-        (request.auth.token.role != null && request.auth.token.role == 'creator') ||
-        (get(/databases/$(database)/documents/Users/$(request.auth.uid)).data.role == 'creator')
-      );
-    }
+**Deterministic sampling**
 
-    function isOwnerOfProblem(problemId) {
-      // The Problems doc is expected to include `creatorId` (uid)
-      return request.auth != null && get(/databases/$(database)/documents/Problems/$(problemId)).data.creatorId == request.auth.uid;
-    }
-  }
+Samples are taken at each discrete simulator timestep via `sim.ontimestep` (not wall-clock). Digital capture uses clock-edge detection. Repeated runs from the same netlist + settings produce identical sequences.
+
+**Contract risks**
+
+- Requires `CircuitJS1` on `contentWindow`; breaks if the iframe is cross-origin.
+- No explicit ready/health handshake — if the simulator hasn't finished loading, `CircuitJS1` will be undefined.
+
+---
+
+## 2) Grading pipeline — end-to-end
+
+### Step-by-step flow
+
+**1. User clicks Submit (`components/Simulator.jsx`)**
+- Gets `sim = iframe.contentWindow.CircuitJS1`.
+- Requires `sim.getTime() === 0` (user must reset to 0ms first).
+- Discovers instrumentation elements via `getInfo()` / `getType()` / `getLabelName()`.
+- Calls `captureAnalog` or `captureDigital` from `samplingUtils`.
+- Invokes `onSubmit(capturedData, sim)`.
+
+**2. `SolveProblem.jsx` receives `handleSimSubmit(capturedData, sim)`**
+- Calls `sim.exportCircuit()` and saves to `localStorage["draft_${problemId}"]`.
+- Sets `simResults` state → mounts `AutoMarker`.
+
+**3. `AutoMarker.jsx` processes `capturedData`**
+
+Uses a `useRef` (`activeTestTabRef`) to read the active tab at submission time — not as a reactive dependency — so switching tabs cannot cancel in-flight processing.
+
+- `testType === "digital"` → `processDigital(table, testKey)`:
+  - Parses golden solution text into `goldenTable` (one decimal int per line).
+  - `gradingUtils.gradeDigital(userTable, goldenTable)` → `{ matchRatio, details, totalCycles, correctCount }`.
+  - `gradingUtils.getVerdict(matchRatio, topics, true)` → `{ passed, score, message }`.
+  - Writes `testSuite[testKey]` with `type:"digital"`, `table`, `verdict`, `summary`.
+
+- `testType === "load"` → `processLoad(userVout, userVin, timeLabels, sampleRate, testKey)`:
+  - Extracts golden data lines (`extractDataPoints`).
+  - `gradingUtils.calculateNormalizedRMSE(userVout, solOutData)` → `nrmse`.
+  - `gradingUtils.getVerdict(nrmse, topics, false)` → verdict + score.
+  - `signalUtils.getFrequencyData(...)` → Bode magnitude/phase + spectrum for both user and golden.
+  - Writes `testSuite[testKey]` with `type:"analog"`, waveform arrays, verdict, and all spectral data.
+  - Resistance per test: `{ test1: bench.noload || 1e12, test2: bench.maxload || 1, test3: bench.minload || 1 }`.
+
+- `testType === "signal"` → `processSignal(...)`:
+  - Same as load but always writes to `testSuite.test1` with `isSignalOnly: true`. No resistance map.
+
+**4. `SolveProblem` monitors `testSuite` for completion**
+
+```js
+const multiTestPassed = testSuite.test1?.verdict?.passed &&
+                        testSuite.test2?.verdict?.passed &&
+                        testSuite.test3?.verdict?.passed;
+const signalPassed = testType === "signal" && testSuite.test1?.verdict?.passed;
+```
+
+When either passes (and not already completed):
+- Sets `isCompleted = true`.
+- Writes to `UserProgress/{uid}_{problemId}` via `setDoc(..., { merge: true })`:
+  ```json
+  { "userId": "<uid>", "problemId": "<id>", "status": "completed", "completedAt": <serverTimestamp>, "score": 100 }
+  ```
+- Only writes if `user?.uid` is present (unauthenticated users do not persist progress).
+
+**5. Results rendered (`AutoMarker/Results.jsx`)**
+
+Dynamic import (`ssr: false`). Uses Chart.js registered once at module level. Tabs: Logic Analyzer / Truth Table (digital) or Time Domain / Frequency Spectrum / Bode Plot (analog).
+
+---
+
+### Score / verdict data structures
+
+**Per-test entry (`testSuite[testKey]`)**
+
+```ts
+{
+  type: "analog" | "digital",
+  verdict: { passed: boolean, score: string, message: string, nrmse?: number, matchRatio?: number },
+  // analog only:
+  timeLabels, userData, solutionData,
+  resistance,
+  freqLabels, userSpectrum, solutionSpectrum,
+  userBodeMag, userBodePhase, solutionBodeMag, solutionBodePhase,
+  isSignalOnly?: boolean,
+  // digital only:
+  table: [{ cycle, expected, actual, passed }],
+  summary: { total, correct }
 }
 ```
 
-Quick notes about the rules
-- The rules restrict writes to `Problems` and golden solution subcollections to admins and creators (or the problem owner). This prevents anonymous or arbitrary accounts from changing problem definitions.
-- `UserProgress` is writeable only by the owning user (and readable by the owner and admins). If you want instructors/admins to mark progress, extend rule accordingly.
-- If you anticipate heavy reads on `Users` during rules evaluation, prefer custom claims on the Auth token (set via Cloud Functions / Admin SDK) to avoid rules-time `get()` overhead.
+**Aggregated verdict (`gradingUtils.calculateFinalVerdict(testSuite, testType)`)**
 
-
----
-
-## 4) Role model (user types and capabilities)
-
-1. Anonymous (unauthenticated)
-   - Can: Browse landing page, read `Problems` and problem detail pages (public), view published circuit examples in `public/circuitAPI/`.
-   - Cannot: Submit graded attempts (because `handleMarkAsComplete` currently expects a `userId`), write `UserProgress`, create or edit problems.
-
-2. Authenticated user (`role: 'user'`)
-   - Can: Attempt problems, capture waveforms, view grading results locally, have `UserProgress` written for their own completed problems, save local drafts (client-side).
-   - Cannot: Create new problems, edit golden solutions, or manage other users.
-
-3. Problem author / Creator (`role: 'creator'`)
-   - All `user` capabilities plus:
-   - Can: Create and update problem documents and subcollections (`initialCircuit`, `solutionWaveform`) for problems they own.
-   - Intended to be used for people who author problem content.
-
-4. Admin (`role: 'admin'`)
-   - Full privileges: create/update/delete any `Problems` and `solutionWaveform`, read all `UserProgress` and `Submissions`, manage users.
-
-Implementation notes
-- The code stores a `role` on `Users/{uid}` in `lib/authUtils.syncUserDocument()` when creating the user document. This value is used in the UI (e.g., `Navbar.jsx` checks `user?.role === "admin"` to show admin links).
-- For secure enforcement, the role must also be reflected in server-side rules (see Firestore rules above) or set as custom claims on the auth token.
-
+```ts
+{
+  isAccepted: boolean,
+  progress: number,
+  requiredCount: number,
+  passCount: number,
+  globalScore: string,   // "0"–"100"
+  statusMessage: string,
+  isFullyComplete: boolean
+}
+```
 
 ---
 
-## 5) `UserProgress` vs `Submissions` — what the repo stores today
+### Data ownership
 
-What is stored today
-- `UserProgress` (lightweight progress)
-  - Current code writes the following document shape to `UserProgress/{userId}_{problemId}` when a challenge is completed:
-    ```json
-    {
-      "userId": "<uid>",
-      "problemId": "<problemId>",
-      "status": "completed",
-      "completedAt": <serverTimestamp>,
-      "score": 100
-    }
-    ```
-  - Purpose: quick lookup of which problems a user has completed and a simplistic score. This drives UI badges (green checks) in `ProblemList`.
+| Component | Owns |
+|---|---|
+| `Simulator.jsx` | Simulator lifecycle, element discovery, capture, hands `capturedData` to parent |
+| `SolveProblem.jsx` | Circuit state, localStorage draft, `testSuite` state, Firestore `UserProgress` write |
+| `AutoMarker.jsx` | Grading orchestration — invokes `gradingUtils` + `signalUtils`, updates `testSuite` |
+| `gradingUtils` / `signalUtils` / `samplingUtils` | Pure numeric analysis helpers |
 
-- `Submissions` (NOT present today — recommended)
-  - There is no persistent write of the user's captured waveform, exported netlist, or a verdict snapshot to Firestore in the current implementation. The only save of a user circuit is to `localStorage` (`draft_<problemId>`).
+---
 
-Why this distinction matters
-- `UserProgress` is effectively a progress-tracking index. It is small and fast to query but insufficient for audit, replayability, or offline re-grading.
-- `Submissions` should be an immutable audit trail of attempts and must include enough data to re-run grading later (captured samples or a pointer to storage where the raw CSV/JSON is kept, exported netlist string, verdict snapshot, and timestamps).
+## 3) Firestore data model
 
-Recommended `Submissions` document shape (example)
+### Collections
+
+| Collection / Path | Shape | Notes |
+|---|---|---|
+| `Problems/{id}` | `{ title, description, difficulty, topics[], testType, sampleCount, timeStep, testbench, creatorId, createdAt }` | Top-level problem metadata |
+| `Problems/{id}/initialCircuit/data` | `{ payload: string }` | Starting circuit netlist |
+| `Problems/{id}/solutionWaveform/{testKey}` | `{ samples: string, sampleRate: number }` | Golden output per test (`test1`–`test3`). `samples` is newline-delimited decimals. |
+| `Users/{uid}` | `{ uid, email, displayName, role, createdAt }` | Written by `authUtils.syncUserDocument()` on first sign-in |
+| `UserProgress/{uid}_{problemId}` | `{ userId, problemId, status:"completed", completedAt, score }` | Lightweight progress index |
+
+### `testType` values
+
+| Value | Meaning | Tests |
+|---|---|---|
+| `"load"` | Analog multi-load (power electronics, etc.) | `test1` (no load), `test2` (max load), `test3` (min load) |
+| `"signal"` | Single analog signal trace | `test1` only |
+| `"digital"` | Bit-vector / clock-edge logic | `test1` (Input A), `test2` (Input B), `test3` (Input C) |
+
+### What is NOT stored today
+
+There is no `Submissions` collection. Captured waveforms and exported netlists are only held in component state and localStorage. This makes replay and offline re-grading impossible.
+
+**Recommended `Submissions` document shape:**
 ```json
 {
   "submissionId": "<uuid>",
   "userId": "<uid>",
-  "problemId": "<problemId>",
-  "createdAt": <serverTimestamp>,
-  "type": "analog" | "digital",
-  "capturedData": { /* a copy of the capturedData object or a reference to Cloud Storage */ },
+  "problemId": "<id>",
+  "createdAt": "<serverTimestamp>",
+  "type": "analog | digital",
+  "capturedData": { "...or Cloud Storage pointer..." },
   "exportedNetlist": "...text...",
-  "verdictSnapshot": { /* copy of testSuite or final verdict */ },
+  "verdictSnapshot": { "...testSuite copy..." },
   "score": 95
 }
 ```
 
-Flow change recommended: when `AutoMarker` finishes grading, write a `Submissions/{submissionId}` doc with the `capturedData`, `exportedNetlist`, and `verdictSnapshot`. Then update `UserProgress` as summary/index data. This preserves an audit trail and enables server-side re-processing later.
-
+Write this from `SolveProblem.handleSimSubmit` after grading completes, then update `UserProgress` as the summary/index.
 
 ---
 
-## 6) Actionable next steps (practical changes you can make right now)
+## 4) Firestore security rules (recommended)
 
-- Add `Submissions` persistence: implement a `saveSubmission()` call in `SolveProblem.handleSimSubmit` or in `AutoMarker` after grading completes. Store either full `capturedData` (small) or upload a CSV to Cloud Storage and store a pointer.
-- Replace the placeholder `userId` in `SolveProblem.handleMarkAsComplete()` with the authenticated `useAuth().user.uid` and protect the UI path so anonymous users cannot mark progress.
-- Add `firestore.rules` to repo (copy recommended rules) and test them using the Firebase Emulator.
-- Consider moving role info into Auth custom claims for performant rule evaluation.
-- Harden CircuitJS integration: add a handshake using `postMessage` so the iframe can explicitly report ready/health and the parent does not rely solely on `contentWindow.CircuitJS1` existence.
+No `firestore.rules` is present in the repository. See `docs/firestore_rules.md` for the full recommended ruleset.
+
+Quick summary of intended access:
+- **Public read**: `Problems`, `initialCircuit`, `solutionWaveform`.
+- **Write to Problems**: creator (owns the problem) or admin.
+- **UserProgress**: created/updated by the owning authenticated user; read by owner or admin.
+- **Submissions**: created by the submitting user; read by owner or admin.
+
+Roles are stored in `Users/{uid}.role` (`"user"` / `"creator"` / `"admin"`). For performant rule evaluation, prefer custom Auth claims over `get()` calls in rules.
+
+---
+
+## 5) Role model
+
+| Role | Capabilities |
+|---|---|
+| **Anonymous** | Browse landing, read published problems. Cannot submit attempts or write `UserProgress`. |
+| **`user`** | Attempt problems, capture waveforms, view grading locally. `UserProgress` written on completion if signed in. Cannot create problems. |
+| **`creator`** | All `user` capabilities + create/update problems and golden solutions they own. |
+| **`admin`** | Full read/write on all collections. Can delete problems, read all `UserProgress` and `Submissions`. |
+
+Role enforcement: `Users/{uid}.role` drives UI gates (e.g. `Navbar.jsx` checks `user?.role === "admin"`). Server-side enforcement requires Firestore rules or custom claims.
+
+---
+
+## 6) Creator workflow (`/create`)
+
+The `CreateProblem` wizard has four locked-sequential steps:
+
+| Step | Section | Gate to advance |
+|---|---|---|
+| 0 — Details | `MetadataSection` | `problem.title` non-empty |
+| 1 — Topics | `TopicSection` | (no gate; back/next free) |
+| 2 — Template | `TemplateSection` | `problem.templateCircuit` non-empty |
+| 3 — Solution | `SolutionSection` | All three solutions captured + `timeStep` valid before publish |
+
+`SolutionSection` uses an embedded `Simulator` with `mode="export"`. Each "Submit" capture in the simulator writes to `problem.solutions.test{1,2,3}` in local state. Publish is gated on all three being present. On publish, two Firestore writes fire in sequence: the `Problems` document, then `solutionWaveform` subcollection docs.
+
+---
+
+## 7) Actionable next steps
+
+- **Add `Submissions` persistence** — write a submission doc in `SolveProblem.handleSimSubmit` after grading, covering `capturedData`, `exportedNetlist`, and the `verdictSnapshot`.
+- **Add `firestore.rules`** — copy the rules from `docs/firestore_rules.md`, deploy via `firebase deploy --only firestore:rules`, and test with the Firebase Emulator.
+- **Move roles to custom claims** — set `admin`/`creator` as Auth custom claims via the Admin SDK to avoid rules-time `get()` overhead.
+- **CircuitJS ready handshake** — add a `postMessage` handshake so the iframe explicitly signals ready, rather than relying on `contentWindow.CircuitJS1` existence.
+- **Add `Submissions` collection Firestore rules** — ensure only the submitting user and admins can read submission documents.

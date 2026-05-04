@@ -6,29 +6,28 @@ import LoadingAnimation from "@/components/LoadingAnimation";
 import { signalUtils } from "@/lib/signalUtils";
 import { gradingUtils } from "@/lib/gradingUtils";
 
-const Results = dynamic(() => import("./Results"), { 
+// ssr: false because Chart.js requires a browser environment
+const Results = dynamic(() => import("./Results"), {
   ssr: false,
-  loading: () => <LoadingAnimation /> 
+  loading: () => <LoadingAnimation />
 });
 
-/**
- * AutoMarker Component
- * Handles the logic for grading user captures against three validation types.
- */
-export default function AutoMarker({ 
-  onBack, 
-  solution, 
-  capturedData, 
+export default function AutoMarker({
+  onBack,
+  solution,
+  capturedData,
   topics = [],
-  testType = "load", 
+  testType = "load",
   testbench = {},
-  activeTestTab,      
-  setActiveTestTab,   
-  testSuite,          
-  setTestSuite        
+  activeTestTab,
+  setActiveTestTab,
+  testSuite,
+  setTestSuite
 }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const lastProcessedDataRef = useRef(null);
+  const activeTestTabRef = useRef(activeTestTab);
+  useEffect(() => { activeTestTabRef.current = activeTestTab; }, [activeTestTab]);
 
   const extractDataPoints = useCallback((text) => {
     if (!text) return [];
@@ -38,21 +37,14 @@ export default function AutoMarker({
       .filter(val => !isNaN(val));
   }, []);
 
-  /**
-   * DIGITAL PROCESSING
-   */
   const processDigital = useCallback((userTable, testKey) => {
     setIsProcessing(true);
-    setTimeout(() => {
+    const tid = setTimeout(() => {
       try {
-        const specificSolution = solution?.[testKey] || "";
-        const goldenTable = specificSolution.trim().split("\n").map(val => ({
-          decimalOutput: parseInt(val.trim(), 10)
-        }));
-
+        const goldenTable = (solution?.[testKey] || "").trim().split("\n")
+          .map(val => ({ decimalOutput: parseInt(val.trim(), 10) }));
         const grade = gradingUtils.gradeDigital(userTable, goldenTable);
         const verdict = gradingUtils.getVerdict(grade.matchRatio, topics, true);
-
         setTestSuite(prev => ({
           ...prev,
           [testKey]: {
@@ -65,32 +57,23 @@ export default function AutoMarker({
       } finally {
         setIsProcessing(false);
       }
-    }, 400);
+    }, 150);
+    return tid;
   }, [solution, topics, setTestSuite]);
 
-  /**
-   * LOAD PROCESSING (Triple-Test Analog)
-   */
   const processLoad = useCallback((userVout, userVin, timeLabels, sampleRate, testKey) => {
     setIsProcessing(true);
     const bench = testbench || {};
-    const resistanceMap = {
-      test1: bench.noload || 1e12,
-      test2: bench.maxload || 1,
-      test3: bench.minload || 1
-    };
+    const resistanceMap = { test1: bench.noload || 1e12, test2: bench.maxload || 1, test3: bench.minload || 1 };
     const activeResistance = Number(resistanceMap[testKey]);
 
-    setTimeout(() => {
+    const tid = setTimeout(() => {
       try {
-        const specificSolution = solution?.[testKey] || "";
-        const solOutData = extractDataPoints(specificSolution);
+        const solOutData = extractDataPoints(solution?.[testKey] || "");
         const nrmse = gradingUtils.calculateNormalizedRMSE(userVout, solOutData);
         const verdict = gradingUtils.getVerdict(nrmse, topics, false);
-
         const targetBode = signalUtils.getFrequencyData(userVin, solOutData, sampleRate);
         const userBode = signalUtils.getFrequencyData(userVin, userVout, sampleRate);
-
         setTestSuite(prev => ({
           ...prev,
           [testKey]: {
@@ -100,10 +83,10 @@ export default function AutoMarker({
             userData: userVout,
             solutionData: solOutData,
             verdict: { ...verdict, nrmse },
-            freqLabels: targetBode.freq, 
+            freqLabels: targetBode.freq,
             userSpectrum: userBode.outputSpectrum,
             solutionSpectrum: targetBode.outputSpectrum,
-            userBodeMag: userBode.bodeMag,      
+            userBodeMag: userBode.bodeMag,
             userBodePhase: userBode.bodePhase,
             solutionBodeMag: targetBode.bodeMag,
             solutionBodePhase: targetBode.bodePhase
@@ -112,37 +95,32 @@ export default function AutoMarker({
       } finally {
         setIsProcessing(false);
       }
-    }, 600);
+    }, 150);
+    return tid;
   }, [solution, extractDataPoints, topics, setTestSuite, testbench]);
 
-  /**
-   * SIGNAL PROCESSING (Single-Test Waveshaping/DSP)
-   */
   const processSignal = useCallback((userVout, userVin, timeLabels, sampleRate) => {
     setIsProcessing(true);
-    setTimeout(() => {
+    const tid = setTimeout(() => {
       try {
-        const specificSolution = solution?.test1 || ""; 
-        const solOutData = extractDataPoints(specificSolution);
+        const solOutData = extractDataPoints(solution?.test1 || "");
         const nrmse = gradingUtils.calculateNormalizedRMSE(userVout, solOutData);
         const verdict = gradingUtils.getVerdict(nrmse, topics, false);
-
         const targetBode = signalUtils.getFrequencyData(userVin, solOutData, sampleRate);
         const userBode = signalUtils.getFrequencyData(userVin, userVout, sampleRate);
-
         setTestSuite(prev => ({
           ...prev,
           test1: {
             type: "analog",
-            isSignalOnly: true, 
+            isSignalOnly: true,
             timeLabels,
             userData: userVout,
             solutionData: solOutData,
             verdict: { ...verdict, nrmse },
-            freqLabels: targetBode.freq, 
+            freqLabels: targetBode.freq,
             userSpectrum: userBode.outputSpectrum,
             solutionSpectrum: targetBode.outputSpectrum,
-            userBodeMag: userBode.bodeMag,      
+            userBodeMag: userBode.bodeMag,
             userBodePhase: userBode.bodePhase,
             solutionBodeMag: targetBode.bodeMag,
             solutionBodePhase: targetBode.bodePhase
@@ -151,34 +129,38 @@ export default function AutoMarker({
       } finally {
         setIsProcessing(false);
       }
-    }, 600);
+    }, 150);
+    return tid;
   }, [solution, extractDataPoints, topics, setTestSuite]);
 
-  /**
-   * TRIGGER LOGIC
-   */
   useEffect(() => {
-    if (capturedData && capturedData !== lastProcessedDataRef.current) {
-      lastProcessedDataRef.current = capturedData;
-      
-      if (testType === "digital") {
-        processDigital(capturedData.table, activeTestTab);
-      } else if (testType === "load") {
-        const userVout = capturedData.data?.output || [];
-        const userVin = capturedData.data?.input || [];
-        processLoad(userVout, userVin, capturedData.timeLabels, capturedData.sampleRate, activeTestTab);
-      } else if (testType === "signal") {
-        const userVout = capturedData.data?.output || [];
-        const userVin = capturedData.data?.input || [];
-        processSignal(userVout, userVin, capturedData.timeLabels, capturedData.sampleRate);
-      }
+    if (!capturedData || capturedData === lastProcessedDataRef.current) return;
+    lastProcessedDataRef.current = capturedData;
+
+    const tabKey = activeTestTabRef.current;
+    if (testType === "digital") {
+      processDigital(capturedData.table, tabKey);
+    } else if (testType === "load") {
+      processLoad(
+        capturedData.data?.output || [],
+        capturedData.data?.input || [],
+        capturedData.timeLabels,
+        capturedData.sampleRate,
+        tabKey
+      );
+    } else if (testType === "signal") {
+      processSignal(
+        capturedData.data?.output || [],
+        capturedData.data?.input || [],
+        capturedData.timeLabels,
+        capturedData.sampleRate
+      );
     }
-  }, [capturedData, processDigital, processLoad, processSignal, testType, activeTestTab]);
+  }, [capturedData, processDigital, processLoad, processSignal, testType]);
 
   const isDigital = testType === "digital";
   const isSignal = testType === "signal";
   const tabLabels = isDigital ? ["Input A", "Input B", "Input C"] : ["No Load", "Max Load", "Min Load"];
-
   const currentDisplayKey = isSignal ? "test1" : activeTestTab;
   const currentData = testSuite[currentDisplayKey];
 
@@ -190,12 +172,12 @@ export default function AutoMarker({
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
           </button>
           <h1 className="text-xl font-bold uppercase tracking-tight">
-             {isSignal ? 'Signal Analysis' : 'Verification Suite'}
+            {isSignal ? "Signal Analysis" : "Verification Suite"}
           </h1>
         </div>
       </div>
 
-      {/* MULTI-TEST TABS: Hidden for Signal problems */}
+      {/* MULTI-TEST TABS: hidden for signal problems */}
       {!isSignal && (
         <div className="tabs tabs-lifted w-full">
           {["test1", "test2", "test3"].map((tKey, idx) => (
@@ -205,14 +187,14 @@ export default function AutoMarker({
               onClick={() => setActiveTestTab(tKey)}
             >
               {!testSuite[tKey] ? (
-                <span className="w-2 h-2 rounded-full bg-base-300"></span>
+                <span className="w-2 h-2 rounded-full bg-base-300" />
               ) : testSuite[tKey].verdict?.passed ? (
                 <span className="text-green-500">
-                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="size-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="size-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
                 </span>
               ) : (
                 <span className="text-red-500">
-                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="size-4"><path strokeLinecap="round" strokeLinejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="size-4"><path strokeLinecap="round" strokeLinejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
                 </span>
               )}
               {tabLabels[idx]}
@@ -227,14 +209,14 @@ export default function AutoMarker({
             <LoadingAnimation />
             <p className="text-sm opacity-60 mt-6 animate-pulse uppercase font-semibold tracking-wider text-blue-600">Processing Waveform...</p>
           </div>
-        ) : (currentData?.verdict) ? (
+        ) : currentData?.verdict ? (
           <div className="animate-in fade-in zoom-in-95 duration-500 p-4">
             <Results chartData={currentData} />
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center p-20 bg-base-50 text-center rounded-xl border-dashed border-2 border-base-200 m-4">
-             <p className="text-sm font-bold opacity-30 uppercase tracking-widest text-center">Awaiting Capture</p>
-             <p className="text-xs opacity-40 mt-1 max-w-xs mx-auto">Click Submit in the simulator to generate the analysis.</p>
+            <p className="text-sm font-bold opacity-30 uppercase tracking-widest text-center">Awaiting Capture</p>
+            <p className="text-xs opacity-40 mt-1 max-w-xs mx-auto">Click Submit in the simulator to generate the analysis.</p>
           </div>
         )}
       </div>

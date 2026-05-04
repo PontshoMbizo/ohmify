@@ -1,66 +1,128 @@
 # Firestore Security Rules — Ohmify
 
-This file explains the `firestore.rules` shipped at the repo root and how to deploy/test them with the Firebase Emulator.
+This file documents the intended Firestore security model. No `firestore.rules` file is currently present in the repo — copy the ruleset below to add one.
 
-## What the rules enforce (summary)
+## Access model summary
 
-- Public read access to `Problems` and their public subcollections (`initialCircuit`, `solutionWaveform`).
-- Write access to `Problems` and golden solutions restricted to `creator` role, the problem owner (`creatorId`), or `admin`.
-- `Users` documents are readable/writable by the owning authenticated user; admins may read all user docs.
-- `UserProgress` may be created/updated only by the owning user; admins can read/delete.
-- `Submissions` (optional) may be created by the submitting user, readable by the owner and admins.
-- Role checks prefer Auth custom claims (`request.auth.token.role`) but fall back to reading `Users/{uid}`.
+| Collection | Read | Write |
+|---|---|---|
+| `Problems/{id}` | Public | Creator (owner) or Admin |
+| `Problems/{id}/initialCircuit` | Public | Problem owner or Admin |
+| `Problems/{id}/solutionWaveform` | Public | Problem owner or Admin |
+| `Users/{uid}` | Owner (own doc) or Admin | Owner (own doc) |
+| `UserProgress/{progressId}` | Owner or Admin | Owner (create/update own) |
+| `Submissions/{submissionId}` | Owner or Admin | Owner (create own) |
 
-## Deploying rules to Firebase (production)
+Roles are stored in `Users/{uid}.role` (`"user"` / `"creator"` / `"admin"`). Rules prefer Auth custom claims (`request.auth.token.role`) and fall back to `get()` on the `Users` doc.
 
-1. Install and login to Firebase CLI if you haven't already:
+---
 
-```bash
-npm install -g firebase-tools
-firebase login
+## Full ruleset
+
+Copy this into `firestore.rules` at the repo root, or paste into the Firebase console.
+
+```js
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /Problems/{problemId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin() || isCreator();
+
+      match /initialCircuit/{docId} {
+        allow read: if true;
+        allow write: if isOwnerOfProblem(problemId) || isAdmin() || isCreator();
+      }
+
+      match /solutionWaveform/{docId} {
+        allow read: if true;
+        allow create, update, delete: if isOwnerOfProblem(problemId) || isAdmin();
+      }
+    }
+
+    match /Users/{uid} {
+      allow read, update, create: if request.auth != null && request.auth.uid == uid;
+      allow read: if isAdmin();
+    }
+
+    match /UserProgress/{progressId} {
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow read:   if request.auth != null && resource.data.userId == request.auth.uid || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /Submissions/{submissionId} {
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow read:   if request.auth != null && resource.data.userId == request.auth.uid || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    function isAdmin() {
+      return request.auth != null && (
+        (request.auth.token.role != null && request.auth.token.role == 'admin') ||
+        (get(/databases/$(database)/documents/Users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    function isCreator() {
+      return request.auth != null && (
+        (request.auth.token.role != null && request.auth.token.role == 'creator') ||
+        (get(/databases/$(database)/documents/Users/$(request.auth.uid)).data.role == 'creator')
+      );
+    }
+
+    function isOwnerOfProblem(problemId) {
+      return request.auth != null &&
+        get(/databases/$(database)/documents/Problems/$(problemId)).data.creatorId == request.auth.uid;
+    }
+  }
+}
 ```
 
-2. From the project root, deploy rules only:
+---
+
+## Deploying rules
 
 ```bash
+# Install Firebase CLI if needed
+npm install -g firebase-tools
+firebase login
+
+# Deploy rules only (from repo root)
 firebase deploy --only firestore:rules
 ```
 
-Note: ensure `firebase.json` in your project points to the correct `firestore.rules` path or run from the repo root where `firestore.rules` is located.
+Ensure `firebase.json` points to `firestore.rules`:
+```json
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  }
+}
+```
 
-## Testing rules locally with the Firebase Emulator
+---
 
-1. Install the emulator (if not installed) and start it:
+## Testing rules locally
 
 ```bash
-npm install -g firebase-tools
-firebase init emulators
-# enable Firestore emulator when prompted
+# Start Firestore emulator
+firebase init emulators   # enable Firestore when prompted
 firebase emulators:start --only firestore
 ```
 
-2. Use the emulator UI at `http://localhost:4000` (default) to inspect documents and rule evaluations.
+Use the Emulator UI at `http://localhost:4000` → Rules Playground to simulate requests as different auth UIDs and custom claims.
 
-3. Run quick rule checks with the `firebase emulators:exec` command and a small Node script that uses the Admin SDK or client SDK pointing to the emulator. Example test script snippet:
+---
 
-```js
-// test-rules.js
-const { initializeApp } = require('firebase/app');
-const { getFirestore, doc, setDoc, getDoc } = require('firebase/firestore');
+## Recommendations
 
-// Initialize the client SDK pointing at the emulator
-// (... your test setup here ...)
-```
-
-A simpler option is to use the Firebase Emulator "Rules Playground" in the Emulator UI to simulate requests as different auth UIDs and custom claims.
-
-## Recommendation
-
-- Prefer setting roles as custom claims (`admin`, `creator`) via the Admin SDK when provisioning users. This avoids `get()` calls inside rules which count against rules evaluation and could be costly at scale.
-- Add the `Submissions` collection and write tests that ensure only the submission owner and admins can read submission documents.
-
-If you want, I can:
-- (1) add `firestore.rules` to `firebase.json` in this repo and add a small `scripts/test-rules.js` harness that runs a few emulator checks, or
-- (2) implement `Submissions` persistence wiring into `SolveProblem` and `AutoMarker` now.
-
-Which next step do you prefer? (1 / 2)
+- **Use custom claims for roles** — set `admin`/`creator` via the Admin SDK when provisioning users. Avoids `get()` calls inside rules, which count as document reads and add latency at scale.
+  ```js
+  // Cloud Function or Admin SDK script
+  await admin.auth().setCustomUserClaims(uid, { role: 'creator' });
+  ```
+- **Add `Submissions` rules** before shipping the `Submissions` collection (see `ARCHITECTURE.md` for the recommended document shape).
+- **Test before deploying to production** — use `firebase emulators:exec` with a small test script to verify that unauthenticated reads on `Problems` pass, and that writes by non-owners are rejected.

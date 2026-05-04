@@ -9,6 +9,7 @@ export default function Drawer({ createdProblems, isLoading }) {
   
   // 2. Initialize state with "library" so it starts active
   const [activeTab, setActiveTab] = useState("library");
+  const [myListOpen, setMyListOpen] = useState(false);
 
   return (
     <div className="drawer lg:drawer-open w-60 overflow-hidden">
@@ -50,27 +51,45 @@ export default function Drawer({ createdProblems, isLoading }) {
             </a>
           </li>
           
-          <div tabIndex={0} className="collapse collapse-arrow bg-base-100 border-base-300 border-t-1">
-            <div className="flex collapse-title font-semibold after:start-5 after:end-auto pe-1 ps-12 text-gray-500 text-sm">My Problem List</div>
-            <div className="flex justify-center collapse-content text-sm">
-              <ul>
+          <div className="border-t border-gray-200 pt-2">
+            <button
+              onClick={() => setMyListOpen(prev => !prev)}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-semibold text-gray-500 hover:bg-gray-100 transition-colors"
+            >
+              <span>My Problem List</span>
+              <svg
+                className={`w-4 h-4 transition-transform duration-200 ${myListOpen ? "rotate-180" : ""}`}
+                fill="none" stroke="currentColor" viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {myListOpen && (
+              <ul className="mt-1 space-y-0.5">
                 {isLoading ? (
-                  <li><a>Loading...</a></li>
+                  <li className="px-3 py-2 text-sm text-gray-400">Loading...</li>
                 ) : user?.role === "user" ? (
-                  <button className="btn btn-soft btn-sm btn-warning">Become a creator</button>
+                  <li className="px-3 py-2">
+                    <button className="btn btn-soft btn-sm btn-warning w-full">Become a creator</button>
+                  </li>
                 ) : createdProblems.length > 0 ? (
                   createdProblems.map((p) => (
-                    <li className="text-sm text-gray-700" key={p.id}>
-                      <a href={`/problem/${p.id}`}>
-                      <Star size={18} color="#39c663" />
-                      {p.title}</a>
+                    <li key={p.id}>
+                      <a
+                        href={`/problem/${p.id}`}
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-100 transition-colors truncate"
+                      >
+                        <Star size={14} color="#39c663" className="shrink-0" />
+                        <span className="truncate">{p.title}</span>
+                      </a>
                     </li>
                   ))
                 ) : (
-                  <li><a className="italic opacity-50">No problems found</a></li>
+                  <li className="px-3 py-2 text-sm italic text-gray-400">No problems found</li>
                 )}
               </ul>
-            </div>
+            )}
           </div>
         </ul>
       </div>

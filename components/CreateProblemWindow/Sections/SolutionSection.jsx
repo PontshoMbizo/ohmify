@@ -4,57 +4,56 @@ import Simulator from "@/components/Simulator";
 import { db } from "@/lib/firebase";
 import { collection, addDoc, doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function SolutionSection({ problem, user, updateProblem, onBack, isPublishing, setIsPublishing }) {
-  // activeTest only relevant for 'load' and 'digital' types
   const [activeTest, setActiveTest] = useState("test1");
+  const [statusMessage, setStatusMessage] = useState(null); // { type: "error"|"success", text: string }
+  const router = useRouter();
   const problemType = problem.testType || "load";
 
-  /**
-   * Manually update the testbench metadata
-   */
   const handleBenchChange = (key, value) => {
     updateProblem({
-      testConfig: {
-        ...problem.testConfig,
-        [key]: value
-      }
+      testConfig: { ...problem.testConfig, [key]: value }
     });
   };
 
-  /**
-   * Captures the simulator output. 
-   */
   const handleCaptureSolution = (capturedData) => {
-    const dataString = problemType === "digital" 
+    const dataString = problemType === "digital"
       ? capturedData.table.map(row => row.decimalOutput).join("\n")
       : (capturedData.data?.output || []).join("\n");
 
-    // For 'signal' type, we always save to test1
     const targetKey = problemType === "signal" ? "test1" : activeTest;
-
-    updateProblem({
-      solutions: { 
-        ...problem.solutions, 
-        [targetKey]: dataString 
-      }
-    });
+    updateProblem({ solutions: { ...problem.solutions, [targetKey]: dataString } });
   };
 
-  /**
-   * Publishes the problem to Firestore
-   */
   const finalizeProblem = async () => {
-    if (!user) return alert("Sign in required.");
-    
+    setStatusMessage(null);
+
+    if (!user) {
+      setStatusMessage({ type: "error", text: "You must be signed in to publish." });
+      return;
+    }
+
     const { test1, test2, test3 } = problem.solutions;
-    if (problemType === "signal" && !test1) return alert("Capture the signal waveform first.");
-    if (problemType !== "signal" && (!test1 || !test2 || !test3)) return alert("Capture all 3 cases first.");
+    if (problemType === "signal" && !test1) {
+      setStatusMessage({ type: "error", text: "Capture the signal waveform first." });
+      return;
+    }
+    if (problemType !== "signal" && (!test1 || !test2 || !test3)) {
+      setStatusMessage({ type: "error", text: "Capture all 3 test cases before publishing." });
+      return;
+    }
+
+    const timeStepNum = Number(problem.timeStep);
+    if (!timeStepNum || timeStepNum <= 0) {
+      setStatusMessage({ type: "error", text: "Invalid time step value." });
+      return;
+    }
 
     setIsPublishing(true);
 
     try {
-      // 1. Prepare Metadata based on Test Type
       let testbench = {};
       if (problemType === "digital") {
         testbench = {
@@ -88,14 +87,12 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
 
       const problemRef = await addDoc(collection(db, "Problems"), problemData);
 
-      // 2. Save Initial Circuit Template
       await setDoc(doc(db, "Problems", problemRef.id, "initialCircuit", "data"), {
         version: 1,
         payload: problem.templateCircuit
       });
 
-      // 3. Save solutions sub-collection
-      const sampleRate = 1 / Number(problem.timeStep);
+      const sampleRate = 1 / timeStepNum;
       const tests = problemType === "signal" ? { test1 } : { test1, test2, test3 };
 
       for (const [key, value] of Object.entries(tests)) {
@@ -105,22 +102,22 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
         });
       }
 
-      alert(`Problem Published Successfully!`);
-      window.location.reload();
+      setStatusMessage({ type: "success", text: "Challenge published!" });
+      setTimeout(() => router.push("/"), 1200);
     } catch (e) {
       console.error("Publishing Error:", e);
-      alert(`Publishing failed: ${e.message}`);
+      setStatusMessage({ type: "error", text: `Publishing failed: ${e.message}` });
       setIsPublishing(false);
     }
   };
 
   return (
-    <section id="section-4" className="relative flex h-screen w-full shrink-0 bg-white">
+    <section id="section-4" className="relative flex h-full w-full bg-white">
       {/* LEFT: SIMULATOR VIEWPORT */}
       <div className="w-[70%] h-full bg-base-100">
-        <Simulator 
-          circuit={problem.templateCircuit} 
-          onSubmit={handleCaptureSolution} 
+        <Simulator
+          circuit={problem.templateCircuit}
+          onSubmit={handleCaptureSolution}
           sampleCount={problem.sampleCount}
           isDigital={problemType === "digital"}
         />
@@ -141,20 +138,19 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
               {problemType === "digital" ? "Memory Payloads (SRAM Map)" : "Testbench Loads (Ohms)"}
             </p>
-            
+
             {problemType === "digital" ? (
               <div className="space-y-3">
-                {/* Textareas for address-indexed multi-line data */}
                 {["payload1", "payload2", "payload3"].map((key, i) => (
                   <div key={key} className="form-control">
                     <label className="label py-0">
                       <span className="label-text text-[9px] font-bold uppercase opacity-50">Payload {String.fromCharCode(65 + i)}</span>
                     </label>
-                    <textarea 
+                    <textarea
                       placeholder={"0: 0 17 33...\n8: 110 120..."}
-                      className="textarea textarea-bordered textarea-xs w-full font-mono h-24 text-[10px] leading-relaxed bg-slate-900 text-blue-300 border-slate-800" 
-                      value={problem.testConfig?.[key] || ""} 
-                      onChange={(e) => handleBenchChange(key, e.target.value)} 
+                      className="textarea textarea-bordered textarea-xs w-full font-mono h-24 text-[10px] leading-relaxed bg-slate-900 text-blue-300 border-slate-800"
+                      value={problem.testConfig?.[key] || ""}
+                      onChange={(e) => handleBenchChange(key, e.target.value)}
                     />
                   </div>
                 ))}
@@ -163,12 +159,12 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
               <div className="space-y-3">
                 <div className="form-control">
                   <label className="label py-0"><span className="label-text text-[9px] font-bold uppercase opacity-50">Max Load (Ω)</span></label>
-                  <input type="number" className="input input-bordered input-sm w-full font-mono" 
+                  <input type="number" className="input input-bordered input-sm w-full font-mono"
                     value={problem.testConfig?.rMax || ""} onChange={(e) => handleBenchChange("rMax", e.target.value)} />
                 </div>
                 <div className="form-control">
                   <label className="label py-0"><span className="label-text text-[9px] font-bold uppercase opacity-50">Min Load (Ω)</span></label>
-                  <input type="number" className="input input-bordered input-sm w-full font-mono" 
+                  <input type="number" className="input input-bordered input-sm w-full font-mono"
                     value={problem.testConfig?.rMin || ""} onChange={(e) => handleBenchChange("rMin", e.target.value)} />
                 </div>
               </div>
@@ -184,8 +180,8 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
               { id: "test2", label: problemType === "digital" ? "Test B" : "Max Load" },
               { id: "test3", label: problemType === "digital" ? "Test C" : "Min Load" }
             ].map(t => (
-              <button 
-                key={t.id} 
+              <button
+                key={t.id}
                 onClick={() => setActiveTest(t.id)}
                 className={`tab flex-1 font-black uppercase text-[10px] transition-all rounded-lg ${activeTest === t.id ? "tab-active bg-blue-600 text-white shadow-md" : "text-slate-500"}`}
               >
@@ -214,10 +210,15 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
 
         {/* FOOTER ACTIONS */}
         <div className="mt-auto space-y-3 pt-6 border-t border-slate-200">
+          {statusMessage && (
+            <div className={`px-4 py-3 rounded-xl text-xs font-bold ${statusMessage.type === "error" ? "bg-red-50 text-red-600 border border-red-200" : "bg-green-50 text-green-700 border border-green-200"}`}>
+              {statusMessage.text}
+            </div>
+          )}
           <button onClick={onBack} className="btn btn-ghost w-full btn-sm opacity-50 uppercase font-black tracking-widest">Back</button>
-          <button 
-            disabled={isPublishing || (problemType === "signal" ? !problem.solutions.test1 : !problem.solutions.test3)} 
-            onClick={finalizeProblem} 
+          <button
+            disabled={isPublishing || (problemType === "signal" ? !problem.solutions.test1 : !(problem.solutions.test1 && problem.solutions.test2 && problem.solutions.test3))}
+            onClick={finalizeProblem}
             className="btn btn-primary w-full shadow-xl font-black uppercase tracking-widest bg-blue-600 border-none hover:bg-blue-700"
           >
             {isPublishing ? <span className="loading loading-spinner"></span> : "Publish Challenge"}

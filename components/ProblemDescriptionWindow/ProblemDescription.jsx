@@ -34,7 +34,7 @@ export default function ProblemDescription({ problem }) {
             {problem.difficulty}
           </span>
 
-          {problem.topic?.map((t, i) => (
+          {problem.topics?.map((t, i) => (
             <span
               key={i}
               className="badge badge-outline border-gray-300 bg-gray-50 text-gray-600"

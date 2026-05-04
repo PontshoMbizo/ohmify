@@ -43,7 +43,7 @@ export default function TopicSection({ problem, updateProblem, onNext, onBack })
   return (
     <section 
       id="section-2" 
-      className="relative flex h-screen w-full flex-col items-center justify-center bg-base-100 shrink-0 px-6 transition-colors duration-500"
+      className="relative flex h-screen w-full flex-col items-center bg-base-100 shrink-0 px-6 transition-colors duration-500"
     >
       {/* Back Button */}
       <button 
@@ -55,10 +55,10 @@ export default function TopicSection({ problem, updateProblem, onNext, onBack })
         </svg>
       </button>
       
-      <div className="flex w-full max-w-6xl items-center justify-center gap-12">
+      <div className="flex w-full max-w-6xl items-center justify-center gap-6">
         <div className="flex flex-1 flex-col gap-8">
           {/* TOPIC SELECTION */}
-          <div className="space-y-4">
+          <div className="">
             <div>
               <h2 className="text-3xl mt-12 font-black text-green-600 uppercase tracking-tighter">Problem Type</h2>
               <p className="text-sm opacity-60 font-medium">
@@ -142,7 +142,7 @@ export default function TopicSection({ problem, updateProblem, onNext, onBack })
       <button 
         onClick={onNext} 
         disabled={problem.topics.length === 0 || !problem.testType}
-        className="absolute bottom-12 right-12 btn btn-primary btn-lg rounded-full px-12 shadow-xl disabled:bg-gray-200"
+        className="absolute bottom-44 right-12 btn btn-primary btn-lg rounded-full px-12 shadow-xl disabled:bg-gray-200"
       >
         Next Step
       </button>
