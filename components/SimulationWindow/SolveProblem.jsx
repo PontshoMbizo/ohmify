@@ -84,14 +84,14 @@ export default function SolveProblem({ circuit, solution, topics = [], testbench
       {/* SUCCESS OVERLAY */}
       {isCompleted && (
         <div className="fixed top-6 right-6 z-50 animate-in fade-in slide-in-from-right-8 duration-700">
-          <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-2xl border border-blue-500/40 flex items-center gap-4 backdrop-blur-md">
-            <div className="bg-blue-600 p-2 rounded-full animate-bounce shadow-lg shadow-blue-500/20">
+          <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-2xl border border-green-500/40 flex items-center gap-4 backdrop-blur-md">
+            <div className="bg-green-600 p-2 rounded-full shadow-lg shadow-green-500/20">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
               </svg>
             </div>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-blue-400">Mission Accomplished</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-green-400">Problem Solved</p>
               <p className="text-xs font-bold text-slate-200">Challenge Marked as Complete</p>
             </div>
           </div>
