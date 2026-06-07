@@ -4,7 +4,7 @@ import ProblemWindow from "@/components/ProblemDescriptionWindow/ProblemWindow";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { db } from "@/lib/firebase";
-import { doc, getDoc, collection, getDocs } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import LoadingAnimation from "@/components/LoadingAnimation";
 import SolveProblem from "@/components/SimulationWindow/SolveProblem";
 
@@ -12,44 +12,35 @@ export default function ProblemPage() {
   const { id } = useParams();
   const [problem, setProblem] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);  // L2
 
   useEffect(() => {
     if (!id) return;
     const loadProblem = async () => {
       try {
-        const metaRef = doc(db, "Problems", id);
-        const metaSnap = await getDoc(metaRef);
+        const [metaSnap, circuitSnap] = await Promise.all([
+          getDoc(doc(db, "Problems", id)),
+          getDoc(doc(db, "Problems", id, "initialCircuit", "data")),
+        ]);
 
-        if (metaSnap.exists()) {
-          const metaData = metaSnap.data();
-          const [circuitSnap, solutionDocs] = await Promise.all([
-            getDoc(doc(db, "Problems", id, "initialCircuit", "data")),
-            getDocs(collection(db, "Problems", id, "solutionWaveform"))
-          ]);
-
-          const solutionsMap = {};
-          let sampleRate = 0;
-          
-          solutionDocs.forEach((doc) => {
-            const data = doc.data();
-            solutionsMap[doc.id] = data.samples || "";
-            if (data.sampleRate) sampleRate = data.sampleRate;
-          });
-
-          setProblem({
-            ...metaData,
-            id: id,
-            initialCircuit: circuitSnap.data()?.payload || "",
-            solutions: solutionsMap, 
-            sampleRate: sampleRate,
-            testType: metaData.testType || (metaData.isDigital ? "digital" : "load")
-          });
-        } else {
+        if (!metaSnap.exists()) {
           setProblem(null);
+          return;
         }
-      } catch (error) {
-        console.error("Error loading problem:", error);
-        setProblem(null);
+
+        const metaData = metaSnap.data();
+        setProblem({
+          ...metaData,
+          id,
+          initialCircuit: circuitSnap.data()?.payload || "",
+          // M3: sampleRate comes from the top-level document, not subcollection iteration.
+          // L1: trim() ensures an accidental empty string doesn't fall through as falsy.
+          testType: metaData.testType?.trim() || (metaData.isDigital ? "digital" : "load"),
+        });
+      } catch (err) {
+        // L2: distinguish a network/permission error from a missing document.
+        console.error("Error loading problem:", err);
+        setError("Failed to load problem. Check your connection and try again.");
       } finally {
         setLoading(false);
       }
@@ -58,20 +49,22 @@ export default function ProblemPage() {
   }, [id]);
 
   if (loading) return <LoadingAnimation />;
+  if (error) return (
+    <div className="p-10 text-center space-y-2">
+      <p className="font-bold text-red-500">{error}</p>
+      <button onClick={() => window.location.reload()} className="text-sm text-gray-400 underline">
+        Retry
+      </button>
+    </div>
+  );
   if (!problem) return <div className="p-10 text-center font-bold">Problem not found.</div>;
 
   return (
-    /* h-[calc(100vh-64px)] ensures the layout fits perfectly under a 64px navbar */
     <div className="h-[calc(100vh)] w-full flex flex-col overflow-hidden bg-white">
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 overflow-hidden items-stretch">
-        
-        {/* Left Column: Scrollable internally via ProblemWindow */}
         <ProblemWindow problem={problem} />
-        
-        {/* Right Column: Simulator & Verification */}
-        <SolveProblem 
-          circuit={problem.initialCircuit} 
-          solution={problem.solutions}
+        <SolveProblem
+          circuit={problem.initialCircuit}
           topics={problem.topics || []}
           sampleCount={problem.sampleCount}
           timeStep={problem.timeStep}

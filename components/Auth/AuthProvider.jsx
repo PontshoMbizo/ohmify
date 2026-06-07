@@ -18,28 +18,39 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        // Double check Firestore for the full user profile
-        const userRef = doc(db, "Users", firebaseUser.uid);
-        const snap = await getDoc(userRef);
-        
-        if (snap.exists()) {
-          setUser({ ...firebaseUser, ...snap.data() });
+      try {
+        if (firebaseUser) {
+          const userRef = doc(db, "Users", firebaseUser.uid);
+          const snap = await getDoc(userRef);
+          const firestoreData = snap.exists()
+            ? snap.data()
+            : await syncUserDocument(firebaseUser);
+
+          // H3: explicit property pick — Firebase User class properties are
+          // non-enumerable so spreading the instance silently produces {}.
+          setUser({
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            displayName: firebaseUser.displayName,
+            photoURL: firebaseUser.photoURL,
+            getIdToken: firebaseUser.getIdToken.bind(firebaseUser),
+            ...firestoreData,
+          });
         } else {
-          // If the document doesn't exist yet, sync it
-          const profile = await syncUserDocument(firebaseUser);
-          setUser({ ...firebaseUser, ...profile });
+          setUser(null);
         }
-      } else {
+      } catch (e) {
+        // H1: always reach setLoading(false) even on network/quota errors.
+        console.error("Auth state error:", e);
         setUser(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
-  // Memoize the context value to prevent unnecessary re-renders of the Navbar
   const contextValue = useMemo(() => ({
     user,
     loading,

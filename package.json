@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "cally": "^0.8.0",
@@ -14,6 +16,7 @@
     "chartjs-plugin-zoom": "^2.2.0",
     "fft-js": "^0.0.12",
     "firebase": "^12.6.0",
+    "firebase-admin": "^13.10.0",
     "lucide-react": "^0.563.0",
     "mathjax": "^4.1.0",
     "mathjax-full": "^3.2.2",
@@ -33,7 +36,8 @@
     "daisyui": "^5.5.14",
     "eslint": "^9",
     "eslint-config-next": "16.0.7",
-    "tailwindcss": "^4"
+    "tailwindcss": "^4",
+    "vitest": "^4.1.8"
   },
   "browserslist": "> 1%"
 }

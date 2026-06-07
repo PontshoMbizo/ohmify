@@ -6,10 +6,10 @@ import { GeneralUtils } from "@/lib/GeneralUtils";
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/components/Auth/AuthProvider";
-import { db } from "@/lib/firebase";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 
-export default function SolveProblem({ circuit, solution, topics = [], testbench, testType, sampleCount }) {
+// C1: solution prop removed — the API route fetches solution data server-side.
+// C1: Firestore write removed — /api/grade writes UserProgress via Admin SDK.
+export default function SolveProblem({ circuit, topics = [], testbench, testType, sampleCount }) {
   const { id: problemId } = useParams();
   const { user } = useAuth();
   const [simResults, setSimResults] = useState(null);
@@ -26,37 +26,6 @@ export default function SolveProblem({ circuit, solution, topics = [], testbench
     const saved = localStorage.getItem(`draft_${problemId}`);
     setCurrentCircuit(saved || circuit);
   }, [problemId, circuit]);
-
-  // Monitor test suite for completion and persist when all tests pass
-  useEffect(() => {
-    if (isCompleted) return;
-
-    const multiTestPassed =
-      testSuite.test1?.verdict?.passed &&
-      testSuite.test2?.verdict?.passed &&
-      testSuite.test3?.verdict?.passed;
-    const signalPassed = testType === "signal" && testSuite.test1?.verdict?.passed;
-
-    if (!multiTestPassed && !signalPassed) return;
-
-    let active = true;
-    setIsCompleted(true);
-
-    if (user?.uid) {
-      const progressRef = doc(db, "UserProgress", `${user.uid}_${problemId}`);
-      setDoc(progressRef, {
-        userId: user.uid,
-        problemId,
-        status: "completed",
-        completedAt: serverTimestamp(),
-        score: 100
-      }, { merge: true }).catch(err => {
-        if (active) console.error("Failed to save progress:", err);
-      });
-    }
-
-    return () => { active = false; };
-  }, [testSuite, testType, isCompleted, user?.uid, problemId]);
 
   const handleSimSubmit = (data, sim) => {
     if (sim && typeof sim.exportCircuit === "function") {
@@ -130,10 +99,12 @@ export default function SolveProblem({ circuit, solution, topics = [], testbench
           testSuite={testSuite}
           setTestSuite={setTestSuite}
           onBack={() => setSimResults(null)}
-          solution={solution}
           capturedData={simResults}
           topics={topics}
           testbench={testbench}
+          problemId={problemId}
+          userId={user?.uid || null}
+          onCompleted={() => setIsCompleted(true)}
         />
       ) : (
         <div className="relative h-full">

@@ -3,8 +3,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import LoadingAnimation from "@/components/LoadingAnimation";
-import { signalUtils } from "@/lib/signalUtils";
-import { gradingUtils } from "@/lib/gradingUtils";
 
 // ssr: false because Chart.js requires a browser environment
 const Results = dynamic(() => import("./Results"), {
@@ -14,7 +12,6 @@ const Results = dynamic(() => import("./Results"), {
 
 export default function AutoMarker({
   onBack,
-  solution,
   capturedData,
   topics = [],
   testType = "load",
@@ -22,141 +19,65 @@ export default function AutoMarker({
   activeTestTab,
   setActiveTestTab,
   testSuite,
-  setTestSuite
+  setTestSuite,
+  problemId,
+  userId,
+  onCompleted,
 }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const lastProcessedDataRef = useRef(null);
   const activeTestTabRef = useRef(activeTestTab);
   useEffect(() => { activeTestTabRef.current = activeTestTab; }, [activeTestTab]);
 
-  const extractDataPoints = useCallback((text) => {
-    if (!text) return [];
-    return text.trim().split("\n")
-      .filter(line => line.trim() && !line.startsWith("#"))
-      .map(line => parseFloat(line.trim()))
-      .filter(val => !isNaN(val));
-  }, []);
-
-  const processDigital = useCallback((userTable, testKey) => {
+  // C1: grading moved server-side — POST to /api/grade instead of running
+  // gradingUtils/signalUtils in the browser.
+  const gradeTest = useCallback(async (testKey, data) => {
     setIsProcessing(true);
-    const tid = setTimeout(() => {
-      try {
-        const goldenTable = (solution?.[testKey] || "").trim().split("\n")
-          .map(val => ({ decimalOutput: parseInt(val.trim(), 10) }));
-        const grade = gradingUtils.gradeDigital(userTable, goldenTable);
-        const verdict = gradingUtils.getVerdict(grade.matchRatio, topics, true);
-        setTestSuite(prev => ({
-          ...prev,
-          [testKey]: {
-            type: "digital",
-            table: grade.details,
-            verdict: { ...verdict, matchRatio: grade.matchRatio },
-            summary: { total: grade.totalCycles, correct: grade.correctCount }
-          }
-        }));
-      } finally {
-        setIsProcessing(false);
-      }
-    }, 150);
-    return tid;
-  }, [solution, topics, setTestSuite]);
+    try {
+      const capturedPayload = testType === "digital"
+        ? { table: data.table }
+        : {
+            output: data.data?.output || [],
+            input: data.data?.input || [],
+            timeLabels: data.timeLabels,
+            sampleRate: data.sampleRate,
+          };
 
-  const processLoad = useCallback((userVout, userVin, timeLabels, sampleRate, testKey) => {
-    setIsProcessing(true);
-    const bench = testbench || {};
-    const resistanceMap = { test1: bench.noload || 1e12, test2: bench.maxload || 1, test3: bench.minload || 1 };
-    const activeResistance = Number(resistanceMap[testKey]);
+      const res = await fetch("/api/grade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          problemId,
+          testType,
+          testKey,
+          topics,
+          testbench,
+          userId,
+          capturedData: capturedPayload,
+        }),
+      });
 
-    const tid = setTimeout(() => {
-      try {
-        const solOutData = extractDataPoints(solution?.[testKey] || "");
-        const nrmse = gradingUtils.calculateNormalizedRMSE(userVout, solOutData);
-        const verdict = gradingUtils.getVerdict(nrmse, topics, false);
-        const targetBode = signalUtils.getFrequencyData(userVin, solOutData, sampleRate);
-        const userBode = signalUtils.getFrequencyData(userVin, userVout, sampleRate);
-        setTestSuite(prev => ({
-          ...prev,
-          [testKey]: {
-            type: "analog",
-            resistance: activeResistance,
-            timeLabels,
-            userData: userVout,
-            solutionData: solOutData,
-            verdict: { ...verdict, nrmse },
-            freqLabels: targetBode.freq,
-            userSpectrum: userBode.outputSpectrum,
-            solutionSpectrum: targetBode.outputSpectrum,
-            userBodeMag: userBode.bodeMag,
-            userBodePhase: userBode.bodePhase,
-            solutionBodeMag: targetBode.bodeMag,
-            solutionBodePhase: targetBode.bodePhase
-          }
-        }));
-      } finally {
-        setIsProcessing(false);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Server error ${res.status}`);
       }
-    }, 150);
-    return tid;
-  }, [solution, extractDataPoints, topics, setTestSuite, testbench]);
 
-  const processSignal = useCallback((userVout, userVin, timeLabels, sampleRate) => {
-    setIsProcessing(true);
-    const tid = setTimeout(() => {
-      try {
-        const solOutData = extractDataPoints(solution?.test1 || "");
-        const nrmse = gradingUtils.calculateNormalizedRMSE(userVout, solOutData);
-        const verdict = gradingUtils.getVerdict(nrmse, topics, false);
-        const targetBode = signalUtils.getFrequencyData(userVin, solOutData, sampleRate);
-        const userBode = signalUtils.getFrequencyData(userVin, userVout, sampleRate);
-        setTestSuite(prev => ({
-          ...prev,
-          test1: {
-            type: "analog",
-            isSignalOnly: true,
-            timeLabels,
-            userData: userVout,
-            solutionData: solOutData,
-            verdict: { ...verdict, nrmse },
-            freqLabels: targetBode.freq,
-            userSpectrum: userBode.outputSpectrum,
-            solutionSpectrum: targetBode.outputSpectrum,
-            userBodeMag: userBode.bodeMag,
-            userBodePhase: userBode.bodePhase,
-            solutionBodeMag: targetBode.bodeMag,
-            solutionBodePhase: targetBode.bodePhase
-          }
-        }));
-      } finally {
-        setIsProcessing(false);
-      }
-    }, 150);
-    return tid;
-  }, [solution, extractDataPoints, topics, setTestSuite]);
+      const { testResult, isCompleted } = await res.json();
+      setTestSuite(prev => ({ ...prev, [testKey]: testResult }));
+      if (isCompleted) onCompleted?.();
+    } catch (err) {
+      console.error("Grading failed:", err);
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [problemId, testType, topics, testbench, userId, setTestSuite, onCompleted]);
 
   useEffect(() => {
     if (!capturedData || capturedData === lastProcessedDataRef.current) return;
     lastProcessedDataRef.current = capturedData;
-
-    const tabKey = activeTestTabRef.current;
-    if (testType === "digital") {
-      processDigital(capturedData.table, tabKey);
-    } else if (testType === "load") {
-      processLoad(
-        capturedData.data?.output || [],
-        capturedData.data?.input || [],
-        capturedData.timeLabels,
-        capturedData.sampleRate,
-        tabKey
-      );
-    } else if (testType === "signal") {
-      processSignal(
-        capturedData.data?.output || [],
-        capturedData.data?.input || [],
-        capturedData.timeLabels,
-        capturedData.sampleRate
-      );
-    }
-  }, [capturedData, processDigital, processLoad, processSignal, testType]);
+    const tabKey = testType === "signal" ? "test1" : activeTestTabRef.current;
+    gradeTest(tabKey, capturedData);
+  }, [capturedData, gradeTest, testType]);
 
   const isDigital = testType === "digital";
   const isSignal = testType === "signal";
@@ -207,7 +128,7 @@ export default function AutoMarker({
         {isProcessing ? (
           <div className="flex flex-col items-center justify-center py-20 gap-2">
             <LoadingAnimation />
-            <p className="text-sm opacity-60 mt-6 animate-pulse uppercase font-semibold tracking-wider text-blue-600">Processing Waveform...</p>
+            <p className="text-sm opacity-60 mt-6 animate-pulse uppercase font-semibold tracking-wider text-green-600">Processing Waveform…</p>
           </div>
         ) : currentData?.verdict ? (
           <div className="animate-in fade-in zoom-in-95 duration-500 p-4">
