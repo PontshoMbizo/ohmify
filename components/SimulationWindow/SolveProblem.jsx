@@ -3,15 +3,11 @@
 import Simulator from "@/components/Simulator";
 import AutoMarker from "@/components/SimulationWindow/AutoMarker/AutoMarker.jsx";
 import { GeneralUtils } from "@/lib/GeneralUtils";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
-import { useAuth } from "@/components/Auth/AuthProvider";
 
-// C1: solution prop removed — the API route fetches solution data server-side.
-// C1: Firestore write removed — /api/grade writes UserProgress via Admin SDK.
 export default function SolveProblem({ circuit, topics = [], testbench, testType, sampleCount }) {
   const { id: problemId } = useParams();
-  const { user } = useAuth();
   const [simResults, setSimResults] = useState(null);
   const [isCompleted, setIsCompleted] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -20,6 +16,9 @@ export default function SolveProblem({ circuit, topics = [], testbench, testType
   const [testSuite, setTestSuite] = useState({ test1: null, test2: null, test3: null });
   const [currentCircuit, setCurrentCircuit] = useState(null);
   const [resetKey, setResetKey] = useState(0);
+
+  // Stable ref so AutoMarker's useCallback dep doesn't change on every render.
+  const handleCompleted = useCallback(() => setIsCompleted(true), []);
 
   // Load draft from localStorage on mount
   useEffect(() => {
@@ -103,8 +102,7 @@ export default function SolveProblem({ circuit, topics = [], testbench, testType
           topics={topics}
           testbench={testbench}
           problemId={problemId}
-          userId={user?.uid || null}
-          onCompleted={() => setIsCompleted(true)}
+          onCompleted={handleCompleted}
         />
       ) : (
         <div className="relative h-full">

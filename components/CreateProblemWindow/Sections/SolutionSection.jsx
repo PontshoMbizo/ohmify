@@ -2,7 +2,7 @@
 
 import Simulator from "@/components/Simulator";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -20,11 +20,25 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
 
   const handleCaptureSolution = (capturedData) => {
     const dataString = problemType === "digital"
-      ? capturedData.table.map(row => row.decimalOutput).join("\n")
+      ? (capturedData.table || []).map(row => row.decimalOutput).join("\n")
       : (capturedData.data?.output || []).join("\n");
 
+    // Reject empty captures here, while the creator can still fix the circuit —
+    // an empty solution doc would make every future submission fail with a 500.
+    if (!dataString.trim()) {
+      setStatusMessage({ type: "error", text: "Capture produced no data. Check the circuit and try again." });
+      return;
+    }
+
     const targetKey = problemType === "signal" ? "test1" : activeTest;
-    updateProblem({ solutions: { ...problem.solutions, [targetKey]: dataString } });
+    updateProblem({
+      solutions: { ...problem.solutions, [targetKey]: dataString },
+      // Record the sample rate the capture actually ran at. The form's
+      // timeStep field is only a fallback — the sim's real dt is the truth,
+      // and the grade API compares user captures against this value.
+      captureRates: { ...(problem.captureRates || {}), [targetKey]: capturedData.sampleRate || null },
+    });
+    setStatusMessage(null);
   };
 
   const finalizeProblem = async () => {
@@ -51,6 +65,17 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
       return;
     }
 
+    // Validate load values before they're frozen into the testbench —
+    // a 0 Ω load silently becomes the grading resistance for current charts.
+    if (problemType === "load") {
+      const rMax = Number(problem.testConfig?.rMax);
+      const rMin = Number(problem.testConfig?.rMin);
+      if (!rMax || rMax <= 0 || !rMin || rMin <= 0) {
+        setStatusMessage({ type: "error", text: "Max and Min load must be positive resistances." });
+        return;
+      }
+    }
+
     setIsPublishing(true);
 
     try {
@@ -64,15 +89,15 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
       } else if (problemType === "load") {
         testbench = {
           noload: 1e12,
-          maxload: Number(problem.testConfig?.rMax || 0),
-          minload: Number(problem.testConfig?.rMin || 0)
+          maxload: Number(problem.testConfig?.rMax),
+          minload: Number(problem.testConfig?.rMin)
         };
       } else {
         testbench = { isSignal: true };
       }
 
       const problemData = {
-        title: problem.title,
+        title: problem.title.trim(),
         difficulty: problem.difficulty,
         description: problem.description,
         topics: problem.topics,
@@ -82,25 +107,33 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
         testbench,
         testType: problemType,
         timeStep: problem.timeStep,
-        sampleCount: problem.sampleCount
+        // Stored as a number — the metadata input yields a string.
+        sampleCount: Number(problem.sampleCount) || 30720
       };
 
-      const problemRef = await addDoc(collection(db, "Problems"), problemData);
-
-      await setDoc(doc(db, "Problems", problemRef.id, "initialCircuit", "data"), {
+      // Atomic publish: problem doc, template circuit, and all solution
+      // waveforms commit together or not at all. The previous sequential
+      // writes could fail halfway and leave a problem that 500s on grading.
+      const batch = writeBatch(db);
+      const problemRef = doc(collection(db, "Problems"));
+      batch.set(problemRef, problemData);
+      batch.set(doc(db, "Problems", problemRef.id, "initialCircuit", "data"), {
         version: 1,
         payload: problem.templateCircuit
       });
 
-      const sampleRate = 1 / timeStepNum;
+      const fallbackRate = 1 / timeStepNum;
       const tests = problemType === "signal" ? { test1 } : { test1, test2, test3 };
 
       for (const [key, value] of Object.entries(tests)) {
-        await setDoc(doc(db, "Problems", problemRef.id, "solutionWaveform", key), {
+        batch.set(doc(db, "Problems", problemRef.id, "solutionWaveform", key), {
           samples: value,
-          sampleRate
+          // Prefer the rate the capture actually ran at; fall back to the form value.
+          sampleRate: problem.captureRates?.[key] || fallbackRate
         });
       }
+
+      await batch.commit();
 
       setStatusMessage({ type: "success", text: "Challenge published!" });
       setTimeout(() => router.push("/"), 1200);

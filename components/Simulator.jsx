@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { samplingUtils } from "@/lib/samplingUtils";
 
 export default function Simulator({ 
@@ -13,17 +13,18 @@ export default function Simulator({
   const [fullScreen, setFullScreen] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const iframeRef = useRef(null);
+  const loadTimerRef = useRef(null);
 
   const getSim = () => iframeRef.current?.contentWindow?.CircuitJS1 || null;
 
-  const handleIframeLoad = () => {
-    setTimeout(loadCircuit, 2000);
-  };
+  // Clear any pending load timers when the component unmounts so stale callbacks
+  // don't fire against a null iframe ref after navigation.
+  useEffect(() => () => clearTimeout(loadTimerRef.current), []);
 
   const loadCircuit = () => {
     const sim = getSim();
     if (!sim) {
-      setTimeout(loadCircuit, 10);
+      loadTimerRef.current = setTimeout(loadCircuit, 10);
       return;
     }
     try {
@@ -32,6 +33,10 @@ export default function Simulator({
     } catch (e) {
       console.error("❌ Error loading circuit:", e);
     }
+  };
+
+  const handleIframeLoad = () => {
+    loadTimerRef.current = setTimeout(loadCircuit, 2000);
   };
 
   const handleInternalSubmit = async () => {
@@ -103,11 +108,12 @@ export default function Simulator({
           numCycles: 330
         });
       } else {
-        /**
-         * UPDATED: Now uses Voltmeter discovery in samplingUtils.
-         * We pass numSamples (30720) directly.
-         */
-        capturedData = await samplingUtils.captureAnalog(sim, sampleCount || 30720);
+        // Voltmeter discovery happens inside samplingUtils. NOTE: the second
+        // argument is an options object — passing the bare number here used to
+        // silently discard the problem's custom sampleCount.
+        capturedData = await samplingUtils.captureAnalog(sim, {
+          numSamples: Number(sampleCount) || 30720,
+        });
       }
       
       onSubmit(capturedData, sim); 

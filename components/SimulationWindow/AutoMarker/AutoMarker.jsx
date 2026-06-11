@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import LoadingAnimation from "@/components/LoadingAnimation";
+import { useAuth } from "@/components/Auth/AuthProvider";
 
 // ssr: false because Chart.js requires a browser environment
 const Results = dynamic(() => import("./Results"), {
@@ -21,9 +22,9 @@ export default function AutoMarker({
   testSuite,
   setTestSuite,
   problemId,
-  userId,
   onCompleted,
 }) {
+  const { user } = useAuth();
   const [isProcessing, setIsProcessing] = useState(false);
   const lastProcessedDataRef = useRef(null);
   const activeTestTabRef = useRef(activeTestTab);
@@ -43,16 +44,20 @@ export default function AutoMarker({
             sampleRate: data.sampleRate,
           };
 
+      // Send the Firebase ID token — server extracts uid from it, never trusts body.
+      const token = await user?.getIdToken?.() || null;
       const res = await fetch("/api/grade", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+        },
+        // topics / testType / testbench are intentionally NOT sent — the
+        // server reads them from the problem document so a client can't
+        // substitute lenient grading parameters.
         body: JSON.stringify({
           problemId,
-          testType,
           testKey,
-          topics,
-          testbench,
-          userId,
           capturedData: capturedPayload,
         }),
       });
@@ -70,7 +75,7 @@ export default function AutoMarker({
     } finally {
       setIsProcessing(false);
     }
-  }, [problemId, testType, topics, testbench, userId, setTestSuite, onCompleted]);
+  }, [problemId, testType, user, setTestSuite, onCompleted]);
 
   useEffect(() => {
     if (!capturedData || capturedData === lastProcessedDataRef.current) return;
