@@ -4,6 +4,32 @@ Issues ordered by severity. Each task has a **Your comment** block — mark it a
 
 ---
 
+## June 2026 review batch (full write-up: `docs/REVIEW-2026-06-11.md`)
+
+A correctness/integrity/prod-readiness pass on top of the C/H/M/L items below.
+
+**Integrity & correctness — DONE**
+- Grade API now derives `testType`/`topics`/`testbench` from the problem doc, not the request body (was exploitable to lower the pass bar).
+- Reject captures shorter than the solution; cap payload sizes (200k analog / 10k digital).
+- Fixed `sampleCount` being silently ignored (`captureAnalog` was passed a bare number, not options).
+- Store + check capture **sample rate** (±5% tolerance) so mismatched time steps can't be graded as garbage.
+- Atomic `writeBatch` publish (was sequential writes that could half-fail).
+- Digital missing-solution guard; capture timeouts (60s); empty-capture and load-value validation in Creator Studio.
+- `syncUserDocument` no longer resets role/points on existing users; Solutions tab now actually fetches its data.
+
+**Prod hardening — DONE**
+- `firestore.rules` hardened: no role self-escalation, `UserProgress` client-write denied (API owns it), problem edits owner-only, `getAfter()` for batch publish.
+- Grade route pinned to Node runtime; per-instance problem/solution cache; anonymous IP rate-limiting.
+- Deploy config: `firebase.json`, `firestore.indexes.json` (UserProgress composite index), `.env.example`, fail-fast env check.
+- Token verification is dev-only without Admin SDK (prod treats missing Admin SDK as anonymous).
+
+**Deferred (by decision)**
+- Anti-cheat via server-side circuit re-simulation — skipped for v1 (learning platform). Revisit for rankings/competition.
+- Digital `numCycles` (330) → problem-level field.
+- M3 (sampleRate to problem-level doc) — still held.
+
+---
+
 ## Critical
 
 ### C1 — Move grading server-side

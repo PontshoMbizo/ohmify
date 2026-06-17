@@ -90,9 +90,9 @@ flowchart TD
 
 5) Simulation & Grading
 
-- `components/Simulator.jsx` (and `components/SimulationWindow/*`) embed CircuitJS (from `public/circuitAPI/`) in an iframe, programmatically import netlist/payload, and deterministically advance the simulator to capture samples.
-- Captured waveforms are normalized (units) and exported as CSV or compared against stored solution waveforms for grading.
-- Grading strategies documented in `TASKS.md` include time-domain comparison (std deviation / RMS), digital logic table matching, and clock-synchronized sampling for digital problems.
+- `components/Simulator.jsx` (and `components/SimulationWindow/*`) embed CircuitJS (from `public/circuitAPI/`) in an iframe, programmatically import the netlist, and deterministically advance the simulator to capture samples via `sim.ontimestep`.
+- **Grading runs server-side.** `AutoMarker.jsx` POSTs the captured samples to `app/api/grade/route.js`, which fetches the golden solution, runs the comparison, and writes `UserProgress` via the Admin SDK. The client never decides pass/fail. This is the security boundary — see `docs/ARCHITECTURE.md` §2.
+- Three grading modes (`problem.testType`): `load` (Normalized RMSE across No-load/Max/Min testbench loads), `signal` (single capture + spectral/Bode comparison), `digital` (clock-synchronized bit-packed bus values vs a golden decimal table).
 
 6) UI components
 
@@ -142,21 +142,25 @@ npm run dev
 
 ## Where to look for core logic (quick pointers)
 
-- Firebase init: `lib/firebase.js`
-- Auth helpers: `lib/authUtils.js`
-- Auth provider: `components/Auth/AuthProvider.jsx`
-- Root layout: `app/layout.js`
+- Firebase init: `lib/firebase.js` (client) · `lib/firebaseAdmin.js` (server)
+- Server-side grading (the trust boundary): `app/api/grade/route.js`
+- Pure analysis helpers: `lib/gradingUtils.js`, `lib/signalUtils.js`, `lib/samplingUtils.js`
+- Auth: `lib/authUtils.js` + `components/Auth/AuthProvider.jsx`
 - Problems list: `app/problem/page.js` + `components/ProblemList.jsx`
-- Problem detail + grader: `app/problem/[id]/page.js` + `components/SimulationWindow/*`
+- Problem detail + grader UI: `app/problem/[id]/page.js` + `components/SimulationWindow/*`
 - Simulator iframe integration: `components/Simulator.jsx` and `public/circuitAPI/`
 
-## Development notes & TODOs
+## Documentation
 
-- Deterministic sampling reliability needs verification (see `TASKS.md`). Increasing the sampling rate or using exported CSVs is a known workaround.
-- Grading strategies vary by problem type: analog/time-domain (RMS/std-dev), frequency-domain (spectral comparison), digital (logic table + clock sync).
+- `docs/ARCHITECTURE.md` — CircuitJS contract, grading pipeline, data model, rules, roles
+- `docs/CREATOR-CONVENTIONS.md` — circuit labeling rules a problem must follow to grade
+- `docs/DEPLOYMENT.md` — Vercel + Firebase free-tier deploy and ops
+- `docs/REVIEW-2026-06-11.md` — latest review: what changed, why, and the prod roadmap
+- `CLAUDE.md` — orientation for AI assistants
+- `TASKS.md` — issue/task board
 
-## Next steps you might want me to do
+## Tests
 
-- Inspect `components/SimulationWindow/SolveProblem.jsx` and `components/Simulator.jsx` to summarize grading logic in detail.
-- Generate a visual file tree or interactive route map for the repo.
-- Create a small CONTRIBUTING.md with local test instructions and Firestore rules suggestions.
+```bash
+npm test        # vitest — 63 tests over the lib/ analysis modules
+```

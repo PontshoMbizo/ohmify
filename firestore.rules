@@ -2,54 +2,77 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Public reading of problems and associated public subcollections
+    // ── Problems ──────────────────────────────────────────────────────────
+    // Public read of problems and their public subcollections. The Solutions
+    // tab intentionally shows golden waveforms, so those stay readable.
     match /Problems/{problemId} {
       allow read: if true;
-      // Writes (create/update/delete) restricted to admins or creators
-      allow create, update, delete: if isAdmin() || isCreator();
+      // Create: creators/admins only, and the doc must claim the author's own uid.
+      allow create: if (isAdmin() || isCreator())
+        && request.resource.data.creatorId == request.auth.uid;
+      // Update/delete: the problem's own creator, or an admin. Previously any
+      // creator could edit anyone's problem.
+      allow update, delete: if isAdmin()
+        || (isCreator() && resource.data.creatorId == request.auth.uid);
 
       match /initialCircuit/{docId} {
         allow read: if true;
-        allow write: if isOwnerOfProblem(problemId) || isAdmin() || isCreator();
+        allow write: if isOwnerOfProblem(problemId) || isAdmin();
       }
 
       match /solutionWaveform/{docId} {
         allow read: if true;
-        // Only admins/creators (problem owners) can update golden solutions
         allow create, update, delete: if isOwnerOfProblem(problemId) || isAdmin();
       }
     }
 
-    // Users collection: users may read their own document and write some profile fields
+    // ── Users ─────────────────────────────────────────────────────────────
+    // SECURITY: role, totalPoints and completedProblems must never be
+    // client-writable. The old rules allowed any user to update their own doc
+    // unrestricted — including setting role: "admin", which isAdmin() trusts.
     match /Users/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid; // user can read own profile
-      allow update: if request.auth != null && request.auth.uid == uid; // user can update own profile
-      allow create: if request.auth != null && request.auth.uid == uid; // allow initial creation
-      // Admins can read all user docs
-      allow read: if isAdmin();
+      allow read: if isSelf(uid) || isAdmin();
+
+      // Initial creation: defaults only — role must be "user", zero points.
+      allow create: if isSelf(uid)
+        && request.resource.data.role == 'user'
+        && (!('totalPoints' in request.resource.data) || request.resource.data.totalPoints == 0)
+        && (!('completedProblems' in request.resource.data) || request.resource.data.completedProblems.size() == 0);
+
+      // Updates: identity/profile fields only. Privileged fields (role,
+      // totalPoints, completedProblems, createdAt) change via Admin SDK only.
+      allow update: if isSelf(uid)
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['displayName', 'photoURL', 'email', 'uid']);
     }
 
-    // UserProgress: user can create/update their own progress; admins can read all
+    // ── UserProgress ──────────────────────────────────────────────────────
+    // Written exclusively by the grade API via the Admin SDK (which bypasses
+    // rules). Client writes are fully locked: a user must never be able to
+    // mark their own problems complete by writing this collection directly.
     match /UserProgress/{progressId} {
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow update: if request.auth != null && resource.data.userId == request.auth.uid;
-      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
-      allow delete: if isAdmin();
+      allow read: if request.auth != null
+        && (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if false;
     }
 
-    // Optional Submissions collection recommendation
+    // ── Submissions (reserved for future server-side circuit audits) ──────
     match /Submissions/{submissionId} {
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
-      allow delete: if isAdmin();
+      allow read: if request.auth != null
+        && (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if false;
     }
 
-    // Helpers
+    // ── Helpers ───────────────────────────────────────────────────────────
+    function isSelf(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
     function isAdmin() {
       return request.auth != null && (
         // Prefer custom claims if available
         (request.auth.token.role != null && request.auth.token.role == 'admin') ||
-        // Fallback: read the Users doc (costly for large scale)
+        // Fallback: read the Users doc (safe now that role is not client-writable)
         (get(/databases/$(database)/documents/Users/$(request.auth.uid)).data.role == 'admin')
       );
     }
@@ -62,8 +85,12 @@ service cloud.firestore {
     }
 
     function isOwnerOfProblem(problemId) {
-      // The Problems doc is expected to include `creatorId` (uid)
-      return request.auth != null && get(/databases/$(database)/documents/Problems/$(problemId)).data.creatorId == request.auth.uid;
+      // getAfter (not get): problem publishing is an atomic writeBatch, so the
+      // parent Problems doc may be created in the SAME request as its
+      // subcollection docs. get() would see the pre-batch state (missing) and
+      // reject every publish; getAfter() sees the post-write state.
+      return request.auth != null
+        && getAfter(/databases/$(database)/documents/Problems/$(problemId)).data.creatorId == request.auth.uid;
     }
   }
 }

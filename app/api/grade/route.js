@@ -5,6 +5,10 @@ import { doc, getDoc, collection, getDocs } from "firebase/firestore";
 import { gradingUtils } from "@/lib/gradingUtils";
 import { signalUtils } from "@/lib/signalUtils";
 
+// firebase-admin requires the Node.js runtime — never let this route be
+// promoted to the Edge runtime.
+export const runtime = "nodejs";
+
 // Hard caps so a hostile payload can't make the FFT/NRMSE loops chew CPU.
 const MAX_ANALOG_SAMPLES = 200_000;
 const MAX_DIGITAL_ROWS = 10_000;
@@ -13,8 +17,11 @@ const MAX_DIGITAL_ROWS = 10_000;
 const SAMPLE_RATE_TOLERANCE = 0.05;
 
 // In-memory sliding-window rate limiter, keyed by verified uid or client IP.
-// Resets on server restart — good enough for a single-instance deployment;
-// swap for Redis on multi-instance.
+// Resets on server restart. On serverless (Vercel) this is per-instance and
+// therefore best-effort: at hobby-tier traffic requests usually land on one
+// warm instance, so it still catches rapid-fire abuse. If real abuse appears
+// or the app scales to many instances, swap for Upstash Redis (free tier) —
+// keep this function's signature and only change its internals.
 const _rateLimitMap = new Map();
 const RATE_WINDOW_MS = 60_000;
 const RATE_MAX = 15;
@@ -73,10 +80,35 @@ function extractDataPoints(text) {
     .filter(val => !isNaN(val));
 }
 
+// Per-instance TTL cache for problem + solution docs. Solution waveforms are
+// ~30k-line strings; re-reading them from Firestore on every submission is the
+// single biggest read cost in the app. Problems are immutable after publish in
+// practice, so a short TTL is safe. On serverless this only helps warm
+// instances — which is exactly where repeated submissions land.
+const _problemCache = new Map();
+const CACHE_TTL_MS = 5 * 60_000;
+const CACHE_MAX_ENTRIES = 50;
+
 // Fetch the problem doc and its solutionWaveform subcollection.
 // Prefers the Admin SDK (bypasses rules, single trust path); falls back to
 // the client SDK for local development without a service account.
 async function fetchProblemAndSolutions(problemId) {
+  const cached = _problemCache.get(problemId);
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.value;
+
+  const value = await _fetchProblemAndSolutionsUncached(problemId);
+  // Don't cache misses (problem may be mid-publish); cap the cache size.
+  if (value.problem) {
+    if (_problemCache.size >= CACHE_MAX_ENTRIES) {
+      const oldest = _problemCache.keys().next().value;
+      _problemCache.delete(oldest);
+    }
+    _problemCache.set(problemId, { at: Date.now(), value });
+  }
+  return value;
+}
+
+async function _fetchProblemAndSolutionsUncached(problemId) {
   const solutions = {};
   if (adminDb) {
     const pSnap = await adminDb.collection("Problems").doc(problemId).get();
