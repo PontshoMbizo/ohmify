@@ -5,6 +5,8 @@ import { db } from "@/lib/firebase";
 import { collection, doc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { encodeWaveform, decimate, computeDecimation } from "@/lib/waveformCodec";
+import { gradingUtils } from "@/lib/gradingUtils";
 
 export default function SolutionSection({ problem, user, updateProblem, onBack, isPublishing, setIsPublishing }) {
   const [activeTest, setActiveTest] = useState("test1");
@@ -18,6 +20,20 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
     });
   };
 
+  // Encode an analog/signal output array into the packed, optionally-decimated
+  // storage form, returning { samples, decimation, decimationError }. The error
+  // quantifies how much the decimated reference deviates from the full capture;
+  // the grader subtracts it as headroom so a solver isn't penalised for it.
+  // Digital goldens stay as newline text (tiny, graded by exact integer match).
+  const encodeGolden = (outputArr) => {
+    const D = computeDecimation(outputArr.length, problemType);
+    return {
+      samples: encodeWaveform(decimate(outputArr, D)),
+      decimation: D,
+      decimationError: gradingUtils.decimationError(outputArr, D),
+    };
+  };
+
   // Load problems capture all three golden waveforms in one automated sweep,
   // so the golden is captured at the exact loads (and the same code path) the
   // solver is graded against.
@@ -25,38 +41,58 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
     if (capturedData.type === "loadSweep") {
       const solutions = { ...problem.solutions };
       const captureRates = { ...(problem.captureRates || {}) };
+      const decimations = { ...(problem.decimations || {}) };
+      const decimationErrors = { ...(problem.decimationErrors || {}) };
       for (const [key, cap] of Object.entries(capturedData.tests || {})) {
-        const ds = (cap.data?.output || []).join("\n");
-        if (!ds.trim()) {
+        const output = cap.data?.output || [];
+        // Validate the raw capture before encoding — an empty solution doc
+        // would make every future submission fail with a 500.
+        if (output.length === 0) {
           setStatusMessage({ type: "error", text: `${key} capture produced no data. Check the circuit and loads, then try again.` });
           return;
         }
-        solutions[key] = ds;
+        const { samples, decimation, decimationError } = encodeGolden(output);
+        solutions[key] = samples;
         captureRates[key] = cap.sampleRate || null;
+        decimations[key] = decimation;
+        decimationErrors[key] = decimationError;
       }
-      updateProblem({ solutions, captureRates });
+      updateProblem({ solutions, captureRates, decimations, decimationErrors });
       setStatusMessage(null);
       return;
     }
 
-    const dataString = problemType === "digital"
-      ? (capturedData.table || []).map(row => row.decimalOutput).join("\n")
-      : (capturedData.data?.output || []).join("\n");
+    const targetKey = problemType === "signal" ? "test1" : activeTest;
 
-    // Reject empty captures here, while the creator can still fix the circuit —
-    // an empty solution doc would make every future submission fail with a 500.
-    if (!dataString.trim()) {
-      setStatusMessage({ type: "error", text: "Capture produced no data. Check the circuit and try again." });
+    if (problemType === "digital") {
+      const table = capturedData.table || [];
+      if (table.length === 0) {
+        setStatusMessage({ type: "error", text: "Capture produced no data. Check the circuit and try again." });
+        return;
+      }
+      updateProblem({
+        solutions: { ...problem.solutions, [targetKey]: table.map(row => row.decimalOutput).join("\n") },
+        captureRates: { ...(problem.captureRates || {}), [targetKey]: capturedData.sampleRate || null },
+        decimations: { ...(problem.decimations || {}), [targetKey]: 1 },
+      });
+      setStatusMessage(null);
       return;
     }
 
-    const targetKey = problemType === "signal" ? "test1" : activeTest;
+    const output = capturedData.data?.output || [];
+    if (output.length === 0) {
+      setStatusMessage({ type: "error", text: "Capture produced no data. Check the circuit and try again." });
+      return;
+    }
+    const { samples, decimation, decimationError } = encodeGolden(output);
     updateProblem({
-      solutions: { ...problem.solutions, [targetKey]: dataString },
+      solutions: { ...problem.solutions, [targetKey]: samples },
       // Record the sample rate the capture actually ran at. The form's
       // timeStep field is only a fallback — the sim's real dt is the truth,
       // and the grade API compares user captures against this value.
       captureRates: { ...(problem.captureRates || {}), [targetKey]: capturedData.sampleRate || null },
+      decimations: { ...(problem.decimations || {}), [targetKey]: decimation },
+      decimationErrors: { ...(problem.decimationErrors || {}), [targetKey]: decimationError },
     });
     setStatusMessage(null);
   };
@@ -159,7 +195,13 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
         batch.set(doc(db, "Problems", problemRef.id, "solutionWaveform", key), {
           samples: value,
           // Prefer the rate the capture actually ran at; fall back to the form value.
-          sampleRate: problem.captureRates?.[key] || fallbackRate
+          sampleRate: problem.captureRates?.[key] || fallbackRate,
+          // Decimation factor baked into the stored golden (1 = none). Read
+          // server-side at grade time to decimate the user capture to match.
+          decimation: problem.decimations?.[key] || 1,
+          // NRMSE the decimation injects into the reference; the grader subtracts
+          // it as headroom so a solver isn't penalised for it.
+          decimationError: problem.decimationErrors?.[key] || 0
         });
       }
 

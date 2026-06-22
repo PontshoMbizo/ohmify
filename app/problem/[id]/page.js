@@ -36,8 +36,10 @@ export default function ProblemPage() {
 
         // The "Solutions" tab (SampleSolution) reads problem.solutions —
         // previously this was never fetched, so the tab always rendered blank.
+        // Keep the full doc per key ({ samples, sampleRate, decimation }) so the
+        // tab can decode the packed format and scale its time axis.
         const solutions = {};
-        solutionSnap.forEach(d => { solutions[d.id] = d.data().samples || ""; });
+        solutionSnap.forEach(d => { solutions[d.id] = d.data(); });
 
         const metaData = metaSnap.data();
         setProblem({

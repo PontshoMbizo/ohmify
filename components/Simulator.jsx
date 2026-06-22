@@ -306,6 +306,7 @@ export default function Simulator({
   onSubmit,
   mode = "sample",
   isDigital = false,
+  loads = null,
   sampleCount,
   timeStep
 }) {
@@ -526,15 +527,15 @@ export default function Simulator({
       return;
     }
 
-    const currentTime = sim.getTime();
-    if (currentTime > 0) {
-      alert("Please click 'Reset' in the simulator to return to 0ms for accurate grading.");
-      return;
-    }
-
     // Guarantee the capture runs at the problem's declared step right before
     // sampling, regardless of how the current canvas was loaded.
     applySimTimeStep(sim);
+
+    // Auto-reset to t=0 so the capture always starts from a clean operating
+    // point — no more "please click Reset" gate. reset() clears transient sim
+    // state only, never the circuit topology the user built. The load sweep
+    // resets per-load internally, so this is just for the single-capture paths.
+    sim.reset?.();
 
     try {
       setIsAnalyzing(true);
@@ -564,6 +565,14 @@ export default function Simulator({
           inputs: digitalParams.inputs,
           outputs: digitalParams.outputs,
           numCycles: 330
+        });
+      } else if (loads) {
+        // Load problems: one Submit drives all three testbench loads
+        // (No-load / Max / Min) in code and returns three captures
+        // ({ type: "loadSweep", tests }), graded together downstream.
+        capturedData = await samplingUtils.captureLoadSweep(sim, {
+          loads,
+          numSamples: Number(sampleCount) || 30720,
         });
       } else {
         capturedData = await samplingUtils.captureAnalog(sim, {

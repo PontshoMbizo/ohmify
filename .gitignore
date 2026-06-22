@@ -13,6 +13,9 @@
 # testing
 /coverage
 
+# waveform backfill backups (local recovery artifacts; contain golden data)
+/scripts/backfill-backup-*.jsonl
+
 # next.js
 /.next/
 /out/

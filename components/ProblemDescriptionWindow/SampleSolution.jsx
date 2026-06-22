@@ -12,6 +12,7 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
+import { decodeWaveform } from '@/lib/waveformCodec';
 
 ChartJS.register(
   CategoryScale,
@@ -27,16 +28,20 @@ export default function SampleSolution({ problem }) {
   const isDigital = problem?.testType === "digital";
   const dt = Number(problem?.timeStep) || 5e-6;
 
-  // Helper to parse specific solution slots
+  // Decode a solution slot — handles the packed "f32:" form and legacy text.
+  // Solutions may be stored as the full doc ({ samples, decimation }) or, for
+  // older shapes, the raw samples string; tolerate both.
   const parseSolutionData = (key) => {
-    const rawData = problem?.solutions?.[key];
-    if (!rawData) return [];
+    const sol = problem?.solutions?.[key];
+    if (!sol) return [];
+    return decodeWaveform(typeof sol === "string" ? sol : sol.samples);
+  };
 
-    return rawData
-      .trim()
-      .split("\n")
-      .map((v) => parseFloat(v))
-      .filter((v) => !isNaN(v));
+  // Decimation stride baked into the stored golden (1 = none). The decoded
+  // points are spaced `decimation * dt` apart, so the time axis scales by it.
+  const solutionDecimation = (key) => {
+    const sol = problem?.solutions?.[key];
+    return Number(sol?.decimation) || 1;
   };
 
   // the three test scenarios
@@ -54,9 +59,12 @@ export default function SampleSolution({ problem }) {
         // Only render the graph if data exists for this slot
         if (solData.length === 0) return null;
 
-        const labels = isDigital 
+        // Decoded samples are spaced (decimation * dt) apart, so the time axis
+        // uses the effective step rather than the raw template dt.
+        const effectiveDt = dt * solutionDecimation(scenario.id);
+        const labels = isDigital
           ? solData.map((_, i) => `Cycle ${i}`)
-          : solData.map((_, i) => (i * dt * 1000).toFixed(4));
+          : solData.map((_, i) => (i * effectiveDt * 1000).toFixed(4));
 
         return (
           <div key={scenario.id} className="space-y-4 overflow-hidden">

@@ -11,6 +11,16 @@ const Results = dynamic(() => import("./Results"), {
   loading: () => <LoadingAnimation />
 });
 
+// Shape an analog capture into the request payload the grade API expects.
+// topics / testType / testbench are intentionally omitted — the server reads
+// them from the problem document so a client can't substitute lenient values.
+const buildAnalogPayload = (data) => ({
+  output: data.data?.output || [],
+  input: data.data?.input || [],
+  timeLabels: data.timeLabels,
+  sampleRate: data.sampleRate,
+});
+
 export default function AutoMarker({
   onBack,
   capturedData,
@@ -37,12 +47,7 @@ export default function AutoMarker({
   const gradeOne = useCallback(async (testKey, data) => {
     const capturedPayload = testType === "digital"
       ? { table: data.table }
-      : {
-          output: data.data?.output || [],
-          input: data.data?.input || [],
-          timeLabels: data.timeLabels,
-          sampleRate: data.sampleRate,
-        };
+      : buildAnalogPayload(data);
 
     // Send the Firebase ID token — server extracts uid from it, never trusts body.
     const token = await user?.getIdToken?.() || null;
@@ -52,9 +57,6 @@ export default function AutoMarker({
         "Content-Type": "application/json",
         ...(token ? { "Authorization": `Bearer ${token}` } : {}),
       },
-      // topics / testType / testbench are intentionally NOT sent — the
-      // server reads them from the problem document so a client can't
-      // substitute lenient grading parameters.
       body: JSON.stringify({
         problemId,
         testKey,
@@ -72,6 +74,50 @@ export default function AutoMarker({
     if (isCompleted) onCompleted?.();
   }, [problemId, testType, user, setTestSuite, onCompleted]);
 
+  // Load-sweep grade: send all three captures in one request. The server grades
+  // each against its golden, writes progress once, and returns per-test results
+  // plus a per-test errors map (a failure on one test doesn't sink the others).
+  // On 413 (oversized batch) we fall back to grading each load individually.
+  const gradeBatch = useCallback(async (tests) => {
+    const captures = {};
+    for (const key of ["test1", "test2", "test3"]) {
+      if (tests[key]) captures[key] = buildAnalogPayload(tests[key]);
+    }
+
+    const token = await user?.getIdToken?.() || null;
+    const res = await fetch("/api/grade", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ problemId, captures }),
+    });
+
+    if (res.status === 413) {
+      // Body too large for a single round-trip — grade each load separately.
+      for (const key of ["test1", "test2", "test3"]) {
+        if (!tests[key]) continue;
+        try {
+          await gradeOne(key, tests[key]);
+        } catch (err) {
+          console.error(`Grading ${key} failed:`, err);
+        }
+      }
+      return;
+    }
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Server error ${res.status}`);
+    }
+
+    const { testResults = {}, errors = {}, isCompleted } = await res.json();
+    setTestSuite(prev => ({ ...prev, ...testResults }));
+    for (const [key, msg] of Object.entries(errors)) console.error(`Grading ${key} failed:`, msg);
+    if (isCompleted) onCompleted?.();
+  }, [problemId, user, setTestSuite, onCompleted, gradeOne]);
+
   // Single-capture grade (signal/digital, or one tab).
   const gradeTest = useCallback(async (testKey, data) => {
     setIsProcessing(true);
@@ -84,24 +130,18 @@ export default function AutoMarker({
     }
   }, [gradeOne]);
 
-  // Load-sweep grade: one Submit produced all three load captures, so grade
-  // them in sequence. A failure on one test is logged but doesn't abort the
-  // others — the server still accumulates per-test progress.
+  // Load-sweep grade: one Submit produced all three load captures, graded in a
+  // single batched request (with a per-load fallback inside gradeBatch).
   const gradeSweep = useCallback(async (tests) => {
     setIsProcessing(true);
     try {
-      for (const key of ["test1", "test2", "test3"]) {
-        if (!tests[key]) continue;
-        try {
-          await gradeOne(key, tests[key]);
-        } catch (err) {
-          console.error(`Grading ${key} failed:`, err);
-        }
-      }
+      await gradeBatch(tests);
+    } catch (err) {
+      console.error("Batch grading failed:", err);
     } finally {
       setIsProcessing(false);
     }
-  }, [gradeOne]);
+  }, [gradeBatch]);
 
   useEffect(() => {
     if (!capturedData || capturedData === lastProcessedDataRef.current) return;

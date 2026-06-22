@@ -41,6 +41,125 @@ describe("gradingUtils.calculateNormalizedRMSE", () => {
   });
 });
 
+// ─── signalRange / isDeadOutput ───────────────────────────────────────────────
+
+describe("gradingUtils.signalRange", () => {
+  it("returns peak-to-peak range", () => {
+    expect(gradingUtils.signalRange([1, 5, 3, -2])).toBe(7);
+  });
+
+  it("returns 0 for empty / invalid input", () => {
+    expect(gradingUtils.signalRange([])).toBe(0);
+    expect(gradingUtils.signalRange(null)).toBe(0);
+  });
+
+  it("ignores non-finite values", () => {
+    expect(gradingUtils.signalRange([0, NaN, 4, Infinity])).toBe(4);
+  });
+});
+
+describe("gradingUtils.isDeadOutput", () => {
+  it("flags a flat user output against a varying golden (miswired)", () => {
+    const golden = [0, 5, 10, 5, 0]; // range 10
+    const user = [0, 0, 0, 0, 0];    // range 0
+    expect(gradingUtils.isDeadOutput(user, golden)).toBe(true);
+  });
+
+  it("does not flag a user output that varies meaningfully", () => {
+    const golden = [0, 5, 10, 5, 0];
+    const user = [0, 4, 9, 5, 0];
+    expect(gradingUtils.isDeadOutput(user, golden)).toBe(false);
+  });
+
+  it("never flags when the golden itself is flat (legitimate DC problem)", () => {
+    const golden = [5, 5, 5, 5];
+    const user = [0, 0, 0, 0];
+    expect(gradingUtils.isDeadOutput(user, golden)).toBe(false);
+  });
+
+  it("handles empty arrays without flagging", () => {
+    expect(gradingUtils.isDeadOutput([], [])).toBe(false);
+  });
+});
+
+// ─── hybrid analog grading ────────────────────────────────────────────────────
+
+describe("gradingUtils.extractFeatures", () => {
+  it("computes RMS and peak", () => {
+    const f = gradingUtils.extractFeatures([3, -4, 3, -4], 1);
+    expect(f.rms).toBeCloseTo(Math.sqrt((9 + 16 + 9 + 16) / 4), 5);
+    expect(f.peak).toBe(4);
+  });
+
+  it("reports a settling time for a signal that starts off its final value", () => {
+    // off-value for the first three samples, then holds at 10 → last out-of-band
+    // sample is index 2 → settlingTime = 2 * dt > 0
+    const settled = gradingUtils.extractFeatures([0, 0, 0, 10, 10, 10, 10, 10, 10, 10], 1e-3);
+    expect(settled.settlingTime).toBeCloseTo(2e-3, 9);
+    // already-flat signal never leaves its band
+    const flat = gradingUtils.extractFeatures([5, 5, 5, 5], 1e-3);
+    expect(flat.settlingTime).toBe(0);
+  });
+
+  it("handles empty input", () => {
+    expect(gradingUtils.extractFeatures([], 1)).toEqual({ rms: 0, peak: 0, settlingTime: 0 });
+  });
+});
+
+describe("gradingUtils.featureError", () => {
+  it("is 0 for identical features", () => {
+    const f = { rms: 2, peak: 5, settlingTime: 0.01 };
+    expect(gradingUtils.featureError(f, f)).toBe(0);
+  });
+
+  it("skips settling time when the golden has no transient", () => {
+    const user = { rms: 2, peak: 5, settlingTime: 0.5 };
+    const golden = { rms: 2, peak: 5, settlingTime: 0 };
+    // only rms+peak compared (both equal) → 0, despite the settling mismatch
+    expect(gradingUtils.featureError(user, golden)).toBe(0);
+  });
+});
+
+describe("gradingUtils.calculateHybridError", () => {
+  it("is 0 for a perfect match", () => {
+    const sig = [0, 1, 2, 3, 2, 1, 0, -1];
+    const r = gradingUtils.calculateHybridError({
+      user: sig, golden: sig, userSpectrum: [1, 2], goldenSpectrum: [1, 2], dt: 1,
+    });
+    expect(r.error).toBeCloseTo(0, 6);
+  });
+
+  it("combines components with the 70/20/10 weighting", () => {
+    const r = gradingUtils.calculateHybridError({
+      user: [1, 1, 1, 1], golden: [0, 0, 0, 0],
+      userSpectrum: [3, 1], goldenSpectrum: [1, 1], dt: 1,
+    });
+    const expected = 0.7 * r.timeError + 0.2 * r.freqError + 0.1 * r.featureError;
+    expect(r.error).toBeCloseTo(expected, 6);
+  });
+
+  it("falls back to the time error for the freq term when no spectrum is given", () => {
+    const r = gradingUtils.calculateHybridError({
+      user: [1, 2, 3], golden: [1, 2, 0], userSpectrum: [], goldenSpectrum: [], dt: 1,
+    });
+    expect(r.freqError).toBe(r.timeError);
+  });
+});
+
+describe("gradingUtils.decimationError", () => {
+  it("is 0 when D <= 1", () => {
+    expect(gradingUtils.decimationError([1, 2, 3, 4], 1)).toBe(0);
+  });
+
+  it("is 0 for a constant signal (nothing lost)", () => {
+    expect(gradingUtils.decimationError([5, 5, 5, 5, 5, 5], 2)).toBe(0);
+  });
+
+  it("is positive for a varying signal decimated below its detail", () => {
+    expect(gradingUtils.decimationError([0, 5, 0, 5, 0, 5, 0, 5], 2)).toBeGreaterThan(0);
+  });
+});
+
 // ─── gradeDigital ────────────────────────────────────────────────────────────
 
 describe("gradingUtils.gradeDigital", () => {
