@@ -8,13 +8,7 @@
 Prioritized; grounded in the current code. Pick any and I'll implement.
 
 ## Grading flow
-1. **Headless / fast-forward capture (biggest win, now 3× more pressing).**
-   Capture runs in real iframe render time (`ontimestep` rides the canvas redraw loop). A load
-   submit now runs three sequential ~30k-sample captures back-to-back, so a load attempt is ~3×
-   slower than before. The runtime doesn't yet expose a render-decoupled stepping mode
-   (`setRenderEnabled(false)` / `runHeadless(steps)`, SIMULATOR.md §6.F). Interim mitigations:
-   lower the default `sampleCount`, or decimate the capture (see storage #3). Real fix needs a
-   runtime patch.
+1. remove the reset simulator since clicking the submit button should work.
 2. **Batch the three load grades into one `/api/grade` call.**
    `AutoMarker.gradeSweep` fires three sequential POSTs. A single request carrying all three
    captures would cut latency, do one problem-doc cache lookup instead of three, and let the
@@ -27,16 +21,3 @@ Prioritized; grounded in the current code. Pick any and I'll implement.
    `checkCircuitHealth` catches solver blow-ups, but an all-zero / flat output (floating output,
    probe on the wrong node) still streams to the grader and fails as an opaque NRMSE miss. A
    cheap "output never moved" check could return an actionable message instead.
-
-## Problem-solution storage
-1. **Waveform size vs the 1 MiB Firestore doc limit.**
-   `solutionWaveform.samples` is a ~30k-line newline-delimited *text* string; load problems store
-   three of them. As `sampleCount` grows this approaches the per-doc limit. Cheapest win: store a
-   packed `Float32Array` as base64 (~4 bytes/sample vs ~10–18 chars/line) — roughly halves the
-   doc and removes the parse. Bigger: move large goldens to Cloud Storage and keep a pointer.
-2. **Parse the golden once, not per grade.**
-   The server re-runs `extractDataPoints` (string→float) on every submission (mitigated by the
-   5-min per-instance cache). A packed binary form removes the per-grade parse entirely.
-3. **Decouple compare/storage cost from capture length.**
-   Grade against a decimated reference (every Nth sample) so storage and the NRMSE/FFT loops
-   don't grow linearly with how long the capture runs.

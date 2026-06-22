@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { samplingUtils } from "@/lib/samplingUtils";
 import { discoverDigitalIO } from "@/lib/circuitDiscovery";
 import { patchTimeStep } from "@/lib/netlistUtils";
@@ -213,8 +214,50 @@ const drawItemClass =
 
 // Recursive renderer for a draw-menu node: a leaf button, a divider, or a
 // category that reveals its children in a hover flyout to the right.
+//
+// The flyout is rendered through a portal with fixed positioning rather than
+// nested inside the scrolling parent dropdown. The parent uses overflow-y:auto
+// (which forces overflow-x to auto), so an in-flow `left-full` flyout would be
+// clipped — and the resulting horizontal-scrollbar flicker is what made the
+// menu jitter while scrolling. A portal escapes the clip entirely; fixed
+// positioning alone is not enough because the dropdown's backdrop-filter
+// establishes a containing block.
 function DrawMenuNode({ node, onPick }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const triggerRef = useRef(null);
+  const closeTimer = useRef(null);
+
+  const cancelClose = () => clearTimeout(closeTimer.current);
+  // Small grace period so moving the cursor across the gap to the flyout
+  // doesn't close it.
+  const scheduleClose = () => {
+    clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => setOpen(false), 120);
+  };
+  const openFlyout = () => {
+    cancelClose();
+    const r = triggerRef.current?.getBoundingClientRect();
+    if (r) {
+      const vh = window.innerHeight;
+      const maxH = vh * 0.7;
+      // Clamp vertically so a category near the bottom still fits on screen.
+      const top = Math.max(8, Math.min(r.top, vh - 8 - maxH));
+      setPos({ top, left: r.right + 4 });
+    }
+    setOpen(true);
+  };
+
+  // Close the (fixed-positioned) flyout on any scroll so it can't float
+  // detached from its trigger when the parent dropdown scrolls.
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener("scroll", close, true);
+    return () => window.removeEventListener("scroll", close, true);
+  }, [open]);
+
+  useEffect(() => () => clearTimeout(closeTimer.current), []);
 
   if (node.divider) {
     return <div className="my-1 mx-2 h-px bg-white/10" />;
@@ -223,20 +266,26 @@ function DrawMenuNode({ node, onPick }) {
   if (node.children) {
     return (
       <div
-        className="relative"
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
+        ref={triggerRef}
+        onMouseEnter={openFlyout}
+        onMouseLeave={scheduleClose}
       >
         <button onClick={(e) => e.stopPropagation()} className={`${drawItemClass} flex items-center justify-between gap-4`}>
           <span>{node.label}</span>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6"/></svg>
         </button>
-        {open && (
-          <div className="absolute left-full top-0 flex flex-col min-w-[210px] max-h-[70vh] overflow-y-auto bg-[#121214]/95 backdrop-blur-xl border border-white/10 rounded-xl py-1.5 px-1 shadow-2xl z-50">
+        {open && typeof document !== "undefined" && createPortal(
+          <div
+            className="fixed flex flex-col min-w-[210px] max-h-[70vh] overflow-y-auto bg-[#121214]/95 backdrop-blur-xl border border-white/10 rounded-xl py-1.5 px-1 shadow-2xl z-[80]"
+            style={{ top: pos.top, left: pos.left }}
+            onMouseEnter={cancelClose}
+            onMouseLeave={scheduleClose}
+          >
             {node.children.map((child, i) => (
               <DrawMenuNode key={i} node={child} onPick={onPick} />
             ))}
-          </div>
+          </div>,
+          document.body
         )}
       </div>
     );

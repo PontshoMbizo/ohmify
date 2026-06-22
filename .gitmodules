@@ -1,0 +1,4 @@
+[submodule "public/circuitAPI"]
+	path = public/circuitAPI
+	url = https://github.com/PontshoMbizo/circuitjs1.git
+	branch = build
