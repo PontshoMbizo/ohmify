@@ -1,4 +1,4 @@
-# Ohmify — ARCHITECTURE
+# Scope.io — ARCHITECTURE
 
 This document covers the CircuitJS integration contract, the grading pipeline end-to-end, Firestore data model, the role model, and the distinction between `UserProgress` and `Submissions`.
 

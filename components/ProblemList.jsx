@@ -40,17 +40,17 @@ export default function ProblemList({
               <button
                 onClick={() => setSelectedTopic(tag)}
                 className={`rounded-full px-3 py-1 text-sm font-medium transition-all whitespace-nowrap
-                  ${selectedTopic === tag ? "bg-green-600 text-white" : "text-gray-500 hover:bg-gray-100"}`}
+                  ${selectedTopic === tag ? "bg-green-600 text-white" : "text-base-content/70 hover:bg-base-200"}`}
               >
                 {tag}
               </button>
-              <span className="px-1.5 py-0.5 rounded-full bg-gray-100 text-[10px] text-gray-400">
+              <span className="px-1.5 py-0.5 rounded-full bg-base-200 text-[10px] text-base-content/50">
                 {tag === "All" ? allProblems.length : allProblems.filter(p => p.topics?.includes(tag)).length}
               </span>
             </div>
           ))}
         </div>
-        <button onClick={() => setIsExpanded(!isExpanded)} className="absolute right-16 flex items-center text-xs text-gray-400 hover:text-gray-600 font-medium transition-colors">
+        <button onClick={() => setIsExpanded(!isExpanded)} className="absolute right-16 flex items-center text-xs text-base-content/60 hover:text-base-content font-medium transition-colors">
           {isExpanded ? 'Collapse' : 'Expand'}
           <svg className={`w-3 h-3 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
@@ -73,7 +73,7 @@ export default function ProblemList({
                       </svg>
                     </div>
                   ) : (
-                    <div className="w-2 h-2 rounded-full bg-gray-200" />
+                    <div className="w-2 h-2 rounded-full bg-base-300" />
                   )}
                 </div>
                 <Link className="flex-1 font-semibold" href={`/problem/${p.id}`}>
@@ -97,7 +97,7 @@ export default function ProblemList({
           <button
             onClick={onLoadMore}
             disabled={loadingMore}
-            className="px-5 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors disabled:opacity-50"
+            className="px-5 py-2 text-sm font-medium text-base-content/70 hover:text-base-content bg-base-200 hover:bg-base-300 rounded-full transition-colors disabled:opacity-50"
           >
             {loadingMore ? "Loading…" : "Load more"}
           </button>

@@ -6,7 +6,7 @@ import React from "react";
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen w-full bg-white font-sans text-gray-800">
+    <div className="min-h-screen w-full bg-base-100 font-sans text-base-content transition-colors duration-300">
       <Hero />
       <Body />
       <Footer />

@@ -1,4 +1,4 @@
-# Firestore Security Rules — Ohmify
+# Firestore Security Rules — Scope.io
 
 This file documents the intended Firestore security model. No `firestore.rules` file is currently present in the repo — copy the ruleset below to add one.
 

@@ -2,7 +2,7 @@ import React from "react";
 
 export default function Hero() {
   return (
-    <section className="relative overflow-hidden bg-white pt-16 pb-16">
+    <section className="relative overflow-hidden bg-base-100 pt-16 pb-16 transition-colors duration-300">
       <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-6 px-6 lg:grid-cols-2">
         
         {/* LEFT PANEL: Illustration & Decorative Elements */}
@@ -21,14 +21,14 @@ export default function Hero() {
         {/* RIGHT PANEL: Hero Text */}
         <div className="flex flex-col">
           <div className="absolute left-20 top-26 h-10 w-3 rounded bg-green-500" />
-          <h1 className="text-center text-6xl font-black leading-none tracking-tighter text-gray-900 lg:text-left lg:text-8xl">
+          <h1 className="text-center text-6xl font-black leading-none tracking-tighter text-base-content lg:text-left lg:text-8xl">
             BUILD,
             <br />
             TINKER,
             <br />
             <span className="text-green-500">SOLVE.</span>
           </h1>
-          <p className="mt-6 text-center text-lg text-gray-600 lg:text-left lg:text-xl">
+          <p className="mt-6 text-center text-lg text-base-content/80 lg:text-left lg:text-xl">
             The ultimate playground for hardware engineers. 
             Interactive circuit design at your fingertips.
           </p>

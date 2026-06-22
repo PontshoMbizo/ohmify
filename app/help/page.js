@@ -101,10 +101,10 @@ export default function Help() {
         <div className="space-y-4">
           <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Documentation</p>
           <h1 className="text-5xl font-black uppercase tracking-tighter text-green-600 leading-none">
-            Guide to Ohmify
+            Guide to Scope.io
           </h1>
           <p className="text-lg text-gray-500 max-w-2xl leading-relaxed">
-            Ohmify is a circuit-design challenge platform powered by CircuitJS. Browse problems, build solutions in an interactive simulator, and receive automated, waveform-level grading — or create challenges for others.
+            Scope.io is a circuit-design challenge platform powered by CircuitJS. Browse problems, build solutions in an interactive simulator, and receive automated, waveform-level grading — or create challenges for others.
           </p>
           <div className="flex flex-wrap gap-2 pt-1">
             <a href="#solving" className="px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wide bg-green-600 text-white hover:bg-green-700 transition-colors">Solving Problems</a>

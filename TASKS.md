@@ -1,294 +1,42 @@
-# Ohmify — Task Board
-
-Issues ordered by severity. Each task has a **Your comment** block — mark it approved or add notes before work begins on that item.
-
----
-
-## June 2026 review batch (full write-up: `docs/REVIEW-2026-06-11.md`)
-
-A correctness/integrity/prod-readiness pass on top of the C/H/M/L items below.
-
-**Integrity & correctness — DONE**
-- Grade API now derives `testType`/`topics`/`testbench` from the problem doc, not the request body (was exploitable to lower the pass bar).
-- Reject captures shorter than the solution; cap payload sizes (200k analog / 10k digital).
-- Fixed `sampleCount` being silently ignored (`captureAnalog` was passed a bare number, not options).
-- Store + check capture **sample rate** (±5% tolerance) so mismatched time steps can't be graded as garbage.
-- Atomic `writeBatch` publish (was sequential writes that could half-fail).
-- Digital missing-solution guard; capture timeouts (60s); empty-capture and load-value validation in Creator Studio.
-- `syncUserDocument` no longer resets role/points on existing users; Solutions tab now actually fetches its data.
-
-**Prod hardening — DONE**
-- `firestore.rules` hardened: no role self-escalation, `UserProgress` client-write denied (API owns it), problem edits owner-only, `getAfter()` for batch publish.
-- Grade route pinned to Node runtime; per-instance problem/solution cache; anonymous IP rate-limiting.
-- Deploy config: `firebase.json`, `firestore.indexes.json` (UserProgress composite index), `.env.example`, fail-fast env check.
-- Token verification is dev-only without Admin SDK (prod treats missing Admin SDK as anonymous).
-
-**Deferred (by decision)**
-- Anti-cheat via server-side circuit re-simulation — skipped for v1 (learning platform). Revisit for rankings/competition.
-- Digital `numCycles` (330) → problem-level field.
-- M3 (sampleRate to problem-level doc) — still held.
-
----
-
-## Critical
-
-### C1 — Move grading server-side
-**Status:** DONE
-**Severity:** Critical
-
-**Problem:** All grading runs in the browser. A user can open DevTools, override the grading logic, and mark any problem complete. Scores cannot be trusted on a competitive platform.
-
-**Root cause:** `AutoMarker.jsx` calls `gradingUtils` directly in the browser; `SolveProblem.jsx` writes `UserProgress` to Firestore from the client. No `/app/api/` directory exists.
-
-**Action plan:**
-1. Install `firebase-admin` package.
-2. Create `lib/firebaseAdmin.js` — initialises the Admin app from a `FIREBASE_SERVICE_ACCOUNT_JSON` env var.
-3. Create `app/api/grade/route.js` — accepts `{ problemId, testType, capturedData, userId }`, fetches the solution waveform from Firestore server-side, runs the appropriate grading function, writes `UserProgress` via Admin SDK, returns the verdict JSON.
-4. Update `AutoMarker.jsx`: replace direct `gradingUtils` calls with `fetch('/api/grade', {...})`. Keep all rendering logic; only the computation moves server-side.
-5. Remove the `setDoc(UserProgress, ...)` write from `SolveProblem.jsx` — the API route owns that write.
-
-**Files touched:**
-- `app/api/grade/route.js` *(new)*
-- `lib/firebaseAdmin.js` *(new)*
-- `components/SimulationWindow/AutoMarker/AutoMarker.jsx`
-- `components/SimulationWindow/SolveProblem.jsx`
-
----
-> **Your comment:**
-> - [-] Approved — go ahead
-> - [ ] Hold — notes:
-
----
-
-### C2 — Add server-side input validation
-**Status:** DONE
-**Severity:** Critical
-
-**Problem:** No user-submitted data is validated before reaching Firestore. The only line of defence is Firestore security rules, which aren't in this repo.
-
-**Root cause:** No API layer exists; the client writes directly via the Firebase SDK.
-
-**Action plan:**
-1. Resolved in conjunction with C1: once the API route exists, add validation of the request body before grading runs.
-2. Validate `problemId` exists in Firestore before fetching the solution.
-3. Validate `capturedData` shape matches the expected type (`analog` / `digital`).
-4. Return HTTP 400 with a descriptive message on any validation failure.
-
-**Files touched:**
-- `app/api/grade/route.js` *(same file as C1)*
-
----
-> **Your comment:**
-> - [-] Approved — go ahead
-> - [ ] Hold — notes:
-
----
-
-## High
-
-### H1 — Auth loading can hang forever on Firestore error
-**Status:** DONE
-**Severity:** High
-
-**Problem:** If `getDoc` throws inside `onAuthStateChanged` (network error, quota exceeded, etc.), `setLoading(false)` is never reached and the entire app freezes on a loading spinner with no recovery.
-
-**Root cause:** `components/Auth/AuthProvider.jsx:20` — async callback with no try/catch; `setLoading(false)` is only on the happy path.
-
-**Action plan:**
-1. Wrap the full async body in `try { ... } catch (e) { console.error(e); setUser(null); } finally { setLoading(false); }`.
-
-**Files touched:**
-- `components/Auth/AuthProvider.jsx`
-
----
-> **Your comment:**
-> - [-] Approved — go ahead
-> - [ ] Hold — notes:
-
----
-
-### H2 — Race condition double-writes user document on first login
-**Status:** DONE
-**Severity:** High
-
-**Problem:** Two browser tabs opening simultaneously both read "no document exists" and both call `setDoc`, silently overwriting each other. Additionally `GoogleAuth` in `authUtils.js` and the `onAuthStateChanged` listener in `AuthProvider.jsx` both call `syncUserDocument`, causing a redundant Firestore write on every single first login.
-
-**Root cause:** `lib/authUtils.js:17` — read-check-write is not atomic. Both `GoogleAuth` and `AuthProvider` independently call `syncUserDocument`.
-
-**Action plan:**
-1. In `syncUserDocument`, replace the `getDoc` + `if (!snap.exists())` block with a single `setDoc(userRef, userData, { merge: true })` — idempotent and concurrency-safe.
-2. Remove the `await syncUserDocument(result.user)` call from `GoogleAuth`. The `onAuthStateChanged` listener handles it; the duplicate call is unnecessary.
-
-**Files touched:**
-- `lib/authUtils.js`
-- `components/Auth/AuthProvider.jsx`
-
----
-> **Your comment:**
-> - [-] Approved — go ahead
-> - [ ] Hold — notes:
-
----
-
-### H3 — Spreading Firebase User object silently loses all properties
-**Status:** DONE
-**Severity:** High
-
-**Problem:** `{ ...firebaseUser, ...snap.data() }` attempts to spread a class instance. Firebase User properties (`uid`, `email`, `getIdToken`, etc.) are non-enumerable — the spread produces `{}`. The `user` in context contains only Firestore data. Any component calling `user.getIdToken()` gets `undefined`.
-
-**Root cause:** `components/Auth/AuthProvider.jsx:27` — assumes class instance is spreadable.
-
-**Action plan:**
-1. Replace the spread with an explicit property pick:
-   ```js
-   {
-     uid: firebaseUser.uid,
-     email: firebaseUser.email,
-     displayName: firebaseUser.displayName,
-     photoURL: firebaseUser.photoURL,
-     getIdToken: firebaseUser.getIdToken.bind(firebaseUser),
-     ...snap.data()
-   }
-   ```
-2. Apply the same fix to the `syncUserDocument` fallback branch (~line 33).
-
-**Files touched:**
-- `components/Auth/AuthProvider.jsx`
-
----
-> **Your comment:**
-> - [-] Approved — go ahead
-> - [ ] Hold — notes:
-
----
-
-## Medium
-
-### M1 — Full table scan on every problem list page load
-**Status:** DONE
-**Severity:** Medium
-
-**Problem:** The problems query fetches every document in the collection unconditionally. Firestore bills per document read — 1 000 problems = 1 000 reads on every page visit.
-
-**Root cause:** `app/problem/page.js:21` — no `limit()` on the query.
-
-**Action plan:**
-1. Add `limit(30)` to the problems query.
-2. Store the last document snapshot in state (`lastVisible`).
-3. Add a "Load more" button to `ProblemList.jsx` that calls `startAfter(lastVisible)` with another `limit(30)` query and appends results to the list.
-
-**Files touched:**
-- `app/problem/page.js`
-- `components/ProblemList.jsx`
-
----
-> **Your comment:**
-> - [-] Approved — go ahead
-> - [ ] Hold — notes:
-
----
-
-### M2 — Problems fetched twice per authenticated session
-**Status:** DONE
-**Severity:** Medium
-
-**Problem:** On initial render `user` is `null` — the effect fires and fetches all problems without progress data. When auth resolves, `user.uid` changes and the effect fires again, re-fetching all problems. Two full reads on every authenticated page load.
-
-**Root cause:** `app/problem/page.js:16` — a single `useEffect` depends on `user?.uid`, but the problems query doesn't need the user.
-
-**Action plan:**
-1. Split into two effects: one for problems (empty dependency array, runs once on mount), one for progress (depends on `user?.uid`, skips if null).
-2. Use a separate `progressLoading` state so the problem list renders immediately while progress loads in the background.
-
-**Files touched:**
-- `app/problem/page.js`
-
----
-> **Your comment:**
-> - [-] Approved — go ahead
-> - [ ] Hold — notes:
-
----
-
-### M3 — sampleRate determined by non-deterministic Firestore iteration
-**Status:** HELD
-**Severity:** Medium
-
-**Problem:** If multiple `solutionWaveform` documents carry different `sampleRate` values, the last one in the `forEach` wins. Firestore's document iteration order is not guaranteed to be consistent, causing intermittent grading failures that are impossible to reproduce.
-
-**Root cause:** `app/problem/[id]/page.js:44` — `sampleRate = data.sampleRate` inside a `forEach` over a subcollection.
-
-**Action plan:**
-1. Move `sampleRate` out of the subcollection into the top-level `Problems/{id}` document (it is problem-level metadata, not per-solution data).
-2. Read it from `metaData.sampleRate` directly in the page — no iteration required.
-3. Update the Creator Studio to write `sampleRate` on the top-level document.
-
-**Files touched:**
-- `app/problem/[id]/page.js`
-
----
-> **Your comment:**
-> - [ ] Approved — go ahead
-> - [-] Hold — notes: we'll deal with this one later.
-
----
-
-## Low
-
-### L1 — testType empty string silently triggers wrong grading mode
-**Status:** DONE
-**Severity:** Low
-
-**Problem:** `metaData.testType || (metaData.isDigital ? "digital" : "load")` — an empty string `""` is falsy, so a blank `testType` field in Firestore silently falls through to the legacy `isDigital` flag. The wrong grading strategy is applied with no error or warning.
-
-**Root cause:** `app/problem/[id]/page.js:52` — implicit falsiness of `""`.
-
-**Action plan:**
-1. Change to an explicit trim-and-check:
-   ```js
-   testType: metaData.testType?.trim() || (metaData.isDigital ? "digital" : "load")
-   ```
-
-**Files touched:**
-- `app/problem/[id]/page.js`
-
----
-> **Your comment:**
-> - [-] Approved — go ahead
-> - [ ] Hold — notes:
-
----
-
-### L2 — Fetch failures show as silent empty content
-**Status:** DONE
-**Severity:** Low
-
-**Problem:** Both page components catch errors with only `console.error`. A network failure and a genuinely missing problem both show the same empty UI. Users cannot tell if the page is broken or simply empty.
-
-**Root cause:** `app/problem/page.js` and `app/problem/[id]/page.js` — no `error` state.
-
-**Action plan:**
-1. Add `const [error, setError] = useState(null)` in both page components.
-2. In each `catch` block, call `setError(err.message)` in addition to `console.error`.
-3. Render an error banner when `error !== null` (distinct from the "not found" case).
-
-**Files touched:**
-- `app/problem/page.js`
-- `app/problem/[id]/page.js`
-
----
-> **Your comment:**
-> - [-] Approved — go ahead
-> - [ ] Hold — notes:
-
----
-
-## Recommended execution order
-
-| Order | Tasks | Reason |
-|---|---|---|
-| 1 | H1, H2, H3 | Auth fixes are isolated; safe to ship immediately |
-| 2 | L1, L2 | One-liners and small additions; clear fast |
-| 3 | M2, M3 | Data-fetching improvements; no grading dependencies |
-| 4 | M1 | Pagination; can run in parallel with M2/M3 |
-| 5 | C1 + C2 | Big structural change; must come last |
+#done
+1. ✅ auto-reset on submit — Submit now calls `sim.reset()` automatically (no more "please reset" alert). `components/Simulator.jsx`.
+2. ✅ sim speed slider stays consistent with the real sim speed after sim-reset and template-reset — the slider now pulls `sim.getSpeed()` after every import and reset. `components/Simulator.jsx` (`syncSpeed`).
+3. ✅ resizable problem-description / simulator divider — new `components/ResizableSplit.jsx`, wired into `app/problem/[id]/page.js` (drag on desktop, stacks on mobile).
+4. ✅ automated load sweep — one Submit sets the output voltmeter's resistance to each testbench load (No-load / Max / Min) via `sim.setElementProperty("output","Resistance",ohms)`, resets, and captures each; `AutoMarker` grades all three; Creator Studio captures the golden the same way. Output voltmeter must be labeled `output` (see `docs/CREATOR-CONVENTIONS.md`). Files: `lib/circuitDiscovery.js`, `lib/samplingUtils.js#captureLoadSweep`, `Simulator.jsx`, `SolveProblem.jsx`, `AutoMarker.jsx`, `SolutionSection.jsx`. Tests added (97 pass).
+
+#improvements backlog (task 5) — grading flow & solution storage
+Prioritized; grounded in the current code. Pick any and I'll implement.
+
+## Grading flow
+1. **Headless / fast-forward capture (biggest win, now 3× more pressing).**
+   Capture runs in real iframe render time (`ontimestep` rides the canvas redraw loop). A load
+   submit now runs three sequential ~30k-sample captures back-to-back, so a load attempt is ~3×
+   slower than before. The runtime doesn't yet expose a render-decoupled stepping mode
+   (`setRenderEnabled(false)` / `runHeadless(steps)`, SIMULATOR.md §6.F). Interim mitigations:
+   lower the default `sampleCount`, or decimate the capture (see storage #3). Real fix needs a
+   runtime patch.
+2. **Batch the three load grades into one `/api/grade` call.**
+   `AutoMarker.gradeSweep` fires three sequential POSTs. A single request carrying all three
+   captures would cut latency, do one problem-doc cache lookup instead of three, and let the
+   server write `UserProgress` in one transaction. Server already reads testbench once per call.
+3. **Phase/alignment tolerance in NRMSE.**
+   `calculateNormalizedRMSE` compares sample-by-sample, so a small time offset between the
+   user's and golden's start fails a waveform that's correct but shifted. Consider a best-shift
+   alignment (cross-correlate, pick min-RMSE offset within a small window) or a tolerance band.
+4. **Reject obviously-miswired captures early.**
+   `checkCircuitHealth` catches solver blow-ups, but an all-zero / flat output (floating output,
+   probe on the wrong node) still streams to the grader and fails as an opaque NRMSE miss. A
+   cheap "output never moved" check could return an actionable message instead.
+
+## Problem-solution storage
+1. **Waveform size vs the 1 MiB Firestore doc limit.**
+   `solutionWaveform.samples` is a ~30k-line newline-delimited *text* string; load problems store
+   three of them. As `sampleCount` grows this approaches the per-doc limit. Cheapest win: store a
+   packed `Float32Array` as base64 (~4 bytes/sample vs ~10–18 chars/line) — roughly halves the
+   doc and removes the parse. Bigger: move large goldens to Cloud Storage and keep a pointer.
+2. **Parse the golden once, not per grade.**
+   The server re-runs `extractDataPoints` (string→float) on every submission (mitigated by the
+   5-min per-instance cache). A packed binary form removes the per-grade parse entirely.
+3. **Decouple compare/storage cost from capture length.**
+   Grade against a decimated reference (every Nth sample) so storage and the NRMSE/FFT loops
+   don't grow linearly with how long the capture runs.

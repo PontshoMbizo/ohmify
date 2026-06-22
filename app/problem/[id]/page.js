@@ -7,6 +7,7 @@ import { db } from "@/lib/firebase";
 import { doc, getDoc, collection, getDocs } from "firebase/firestore";
 import LoadingAnimation from "@/components/LoadingAnimation";
 import SolveProblem from "@/components/SimulationWindow/SolveProblem";
+import ResizableSplit from "@/components/ResizableSplit";
 
 export default function ProblemPage() {
   const { id } = useParams();
@@ -72,17 +73,19 @@ export default function ProblemPage() {
 
   return (
     <div className="h-[calc(100vh)] w-full flex flex-col overflow-hidden bg-white">
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 overflow-hidden items-stretch">
-        <ProblemWindow problem={problem} />
-        <SolveProblem
-          circuit={problem.initialCircuit}
-          topics={problem.topics || []}
-          sampleCount={problem.sampleCount}
-          timeStep={problem.timeStep}
-          testbench={problem.testbench}
-          testType={problem.testType}
-        />
-      </div>
+      <ResizableSplit
+        left={<ProblemWindow problem={problem} />}
+        right={
+          <SolveProblem
+            circuit={problem.initialCircuit}
+            topics={problem.topics || []}
+            sampleCount={problem.sampleCount}
+            timeStep={problem.timeStep}
+            testbench={problem.testbench}
+            testType={problem.testType}
+          />
+        }
+      />
     </div>
   );
 }

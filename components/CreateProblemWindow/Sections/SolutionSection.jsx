@@ -18,7 +18,27 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
     });
   };
 
+  // Load problems capture all three golden waveforms in one automated sweep,
+  // so the golden is captured at the exact loads (and the same code path) the
+  // solver is graded against.
   const handleCaptureSolution = (capturedData) => {
+    if (capturedData.type === "loadSweep") {
+      const solutions = { ...problem.solutions };
+      const captureRates = { ...(problem.captureRates || {}) };
+      for (const [key, cap] of Object.entries(capturedData.tests || {})) {
+        const ds = (cap.data?.output || []).join("\n");
+        if (!ds.trim()) {
+          setStatusMessage({ type: "error", text: `${key} capture produced no data. Check the circuit and loads, then try again.` });
+          return;
+        }
+        solutions[key] = ds;
+        captureRates[key] = cap.sampleRate || null;
+      }
+      updateProblem({ solutions, captureRates });
+      setStatusMessage(null);
+      return;
+    }
+
     const dataString = problemType === "digital"
       ? (capturedData.table || []).map(row => row.decimalOutput).join("\n")
       : (capturedData.data?.output || []).join("\n");
@@ -40,6 +60,16 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
     });
     setStatusMessage(null);
   };
+
+  // Resistances for the automated load sweep (load problems only), taken from
+  // the testbench inputs above. Captured the same way the solver is graded.
+  const loads = problemType === "load"
+    ? {
+        test1: 1e12,
+        test2: Number(problem.testConfig?.rMax),
+        test3: Number(problem.testConfig?.rMin),
+      }
+    : null;
 
   const finalizeProblem = async () => {
     setStatusMessage(null);
@@ -153,6 +183,8 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
           onSubmit={handleCaptureSolution}
           sampleCount={problem.sampleCount}
           isDigital={problemType === "digital"}
+          loads={loads}
+          timeStep={problem.timeStep}
         />
       </div>
 
@@ -235,7 +267,7 @@ export default function SolutionSection({ problem, user, updateProblem, onBack, 
             <div className="h-2 w-2 rounded-full bg-amber-400 mt-1 shrink-0" />
             <p className="text-[10px] leading-relaxed text-slate-500 font-medium italic">
               {problemType === "digital" && "ACTION: Copy the payload above, paste into simulator SRAM, click RESET, then click SUBMIT in the simulator window."}
-              {problemType === "load" && "ACTION: Set Voltmeter resistance to match the values above, click RESET, then click SUBMIT."}
+              {problemType === "load" && "ACTION: Set the Max/Min loads above and label the output voltmeter \"output\". One SUBMIT captures all three loads (No-load / Max / Min) automatically."}
               {problemType === "signal" && "ACTION: Capture the gold standard output for this circuit's primary logic function."}
             </p>
           </div>

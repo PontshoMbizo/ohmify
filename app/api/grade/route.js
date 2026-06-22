@@ -270,11 +270,35 @@ export async function POST(request) {
 
       // Comparing sample-by-sample is meaningless if the user's simulator runs
       // at a different time step than the one the solution was captured with.
-      const storedRate = Number(solutionDoc.sampleRate);
+      //
+      // We accept the capture if its rate matches *either* reference within
+      // tolerance:
+      //   1. the problem's declared time step (`problem.timeStep`) — the
+      //      contract baked into the template header, which a faithfully-loaded
+      //      template always reproduces; and
+      //   2. the rate the golden was actually captured at (`solutionDoc.sampleRate`).
+      // CircuitJS uses an *adaptive* time step (it halves `timeStep` for stiff
+      // circuits), so a golden stored from a reduced step — or any legacy/
+      // inconsistently-authored problem — could otherwise reject every honest
+      // submission no matter how many times the user resets. Requiring a match
+      // to only one stored number was the source of unfixable "time step
+      // doesn't match" failures.
       const userRate = Number(sampleRate);
-      if (isFinite(storedRate) && storedRate > 0 && isFinite(userRate) && userRate > 0) {
-        const drift = Math.abs(userRate - storedRate) / storedRate;
-        if (drift > SAMPLE_RATE_TOLERANCE) {
+      const declaredStep = Number(problem.timeStep);
+      const declaredRate = declaredStep > 0 ? 1 / declaredStep : NaN;
+      const storedRate = Number(solutionDoc.sampleRate);
+
+      const within = (ref) =>
+        isFinite(ref) && ref > 0 && Math.abs(userRate - ref) / ref <= SAMPLE_RATE_TOLERANCE;
+
+      const haveReference =
+        (isFinite(declaredRate) && declaredRate > 0) || (isFinite(storedRate) && storedRate > 0);
+
+      if (isFinite(userRate) && userRate > 0 && haveReference) {
+        if (!within(declaredRate) && !within(storedRate)) {
+          console.warn(
+            `[grade] Rate mismatch for ${problemId}/${testKey}: userRate=${userRate}, declaredRate=${declaredRate}, storedRate=${storedRate}`
+          );
           return NextResponse.json(
             { error: "Simulation time step doesn't match this problem's reference. Reset the circuit template (which restores the correct time step) and capture again." },
             { status: 400 }

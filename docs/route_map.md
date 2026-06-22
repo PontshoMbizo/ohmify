@@ -1,4 +1,4 @@
-# Ohmify — Route & Component Map
+# Scope.io — Route & Component Map
 
 ## App Routes
 

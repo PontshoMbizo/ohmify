@@ -3,7 +3,7 @@ import { samplingUtils } from "../lib/samplingUtils.js";
 
 // ─── Shared mock factory ──────────────────────────────────────────────────────
 
-function makeSim({ hasVoltmeter = true, hasInputNode = false, clockValues = [], voltageMap = {} } = {}) {
+function makeSim({ hasVoltmeter = true, hasInputNode = false, clockValues = [], voltageMap = {}, circuitValid = null, simError = null, maxTimeStep = null } = {}) {
   // All elements must implement getType/getLabelName because captureAnalog
   // iterates every element and calls those methods during discovery.
   const voltmeter = {
@@ -43,6 +43,14 @@ function makeSim({ hasVoltmeter = true, hasInputNode = false, clockValues = [], 
     // Convenience: fire the current handler once
     tick() { if (stepHandler) stepHandler(); },
   };
+
+  // Only expose the new health API when a test opts in, so the default mock
+  // still exercises the "un-patched runtime" degrade-to-healthy path.
+  if (circuitValid !== null) sim.isCircuitValid = vi.fn(() => circuitValid);
+  if (simError !== null) sim.getSimulationErrors = vi.fn(() => simError);
+  // When provided, expose the stable nominal step so the capture reports a
+  // rate independent of any adaptive reduction in getTimeStep().
+  if (maxTimeStep !== null) sim.getMaxTimeStep = vi.fn(() => maxTimeStep);
 
   return { sim, voltmeter };
 }
@@ -185,5 +193,148 @@ describe("samplingUtils.captureDigital", () => {
     const result = await promise;
 
     expect(result.table[0].decimalOutput).toBe(2); // bit0=0, bit1=1 → 0b10 = 2
+  });
+});
+
+// ─── Solver-health guard (new circuitDiscovery integration) ───────────────────
+
+describe("samplingUtils health checks", () => {
+  it("captureAnalog rejects with the solver error on a singular matrix", async () => {
+    const { sim } = makeSim({
+      hasVoltmeter: true,
+      circuitValid: false,
+      simError: "Singular matrix!",
+    });
+
+    const promise = samplingUtils.captureAnalog(sim, { numSamples: 10 });
+    sim.tick(); // first step runs the health check (length 0 % 256 === 0)
+
+    await expect(promise).rejects.toMatch(/Singular matrix/);
+    expect(sim.setSimRunning).toHaveBeenCalledWith(false);
+  });
+
+  it("captureDigital rejects with the solver error on an unstable circuit", async () => {
+    const { sim } = makeSim({
+      clockValues: [0, 5],
+      circuitValid: false,
+      simError: "No path for current source!",
+    });
+
+    const promise = samplingUtils.captureDigital(sim, { numCycles: 2, outputs: ["Q0"] });
+    sim.tick(); // first step runs the health check
+
+    await expect(promise).rejects.toMatch(/No path for current source/);
+  });
+
+  it("captureAnalog reports the stable nominal step, not the adaptive getTimeStep", async () => {
+    const NUM = 3;
+    // getTimeStep() is the (reduced) adaptive step; getMaxTimeStep() is nominal.
+    const { sim } = makeSim({ hasVoltmeter: true, maxTimeStep: 0.002 });
+    sim.getTimeStep.mockReturnValue(0.0005); // simulate a halved/jittered step
+
+    const promise = samplingUtils.captureAnalog(sim, { numSamples: NUM });
+    for (let i = 0; i < NUM; i++) sim.tick();
+    const result = await promise;
+
+    expect(result.timeStep).toBe(0.002);
+    expect(result.sampleRate).toBeCloseTo(1 / 0.002, 6); // 500, not 2000
+  });
+
+  it("captureAnalog falls back to getTimeStep when getMaxTimeStep is absent", async () => {
+    const NUM = 3;
+    const { sim } = makeSim({ hasVoltmeter: true }); // no getMaxTimeStep
+    sim.getTimeStep.mockReturnValue(0.001);
+
+    const promise = samplingUtils.captureAnalog(sim, { numSamples: NUM });
+    for (let i = 0; i < NUM; i++) sim.tick();
+    const result = await promise;
+
+    expect(result.sampleRate).toBeCloseTo(1 / 0.001, 6);
+  });
+
+  it("captureAnalog completes normally when the circuit is healthy", async () => {
+    const NUM = 4;
+    const { sim } = makeSim({
+      hasVoltmeter: true,
+      circuitValid: true,
+    });
+
+    const promise = samplingUtils.captureAnalog(sim, { numSamples: NUM });
+    for (let i = 0; i < NUM; i++) sim.tick();
+
+    const result = await promise;
+    expect(result.type).toBe("analog");
+    expect(sim.isCircuitValid).toHaveBeenCalled();
+  });
+});
+
+// ─── captureLoadSweep ───────────────────────────────────────────────────────
+
+// A sim whose ontimestep setter auto-drives the handler to completion, so a
+// full captureAnalog resolves without manual ticks — lets us await the
+// sequential per-load captures inside captureLoadSweep.
+function makeSweepSim() {
+  const voltmeter = {
+    getInfo: () => ["Voltmeter"],
+    getType: () => "VoltmeterElm",
+    getLabelName: () => "output",
+    getVoltageDiff: vi.fn(() => 5.0),
+    getCurrent: vi.fn(() => 0.01),
+  };
+  let stepHandler = null;
+  const sim = {
+    getTimeStep: vi.fn(() => 0.001),
+    getMaxTimeStep: vi.fn(() => 0.001),
+    getElements: vi.fn(() => [voltmeter]),
+    setSimRunning: vi.fn(),
+    reset: vi.fn(),
+    setElementProperty: vi.fn(),
+    getNodeVoltage: vi.fn(() => 0),
+    get ontimestep() { return stepHandler; },
+    set ontimestep(fn) {
+      stepHandler = fn;
+      if (fn) {
+        const drive = () => { if (stepHandler === fn) { fn(); queueMicrotask(drive); } };
+        queueMicrotask(drive);
+      }
+    },
+  };
+  return { sim, voltmeter };
+}
+
+describe("samplingUtils.captureLoadSweep", () => {
+  it("rejects (fails closed) when the runtime can't set element properties", async () => {
+    const { sim } = makeSweepSim();
+    delete sim.setElementProperty;
+    await expect(
+      samplingUtils.captureLoadSweep(sim, { loads: { test1: 1e12 }, numSamples: 2 })
+    ).rejects.toThrow(/can't set loads/i);
+  });
+
+  it("sets the voltmeter resistance per load and captures each", async () => {
+    const { sim } = makeSweepSim();
+    const result = await samplingUtils.captureLoadSweep(sim, {
+      loads: { test1: 1e12, test2: 100, test3: 10 },
+      numSamples: 2,
+    });
+
+    expect(result.type).toBe("loadSweep");
+    expect(Object.keys(result.tests)).toEqual(["test1", "test2", "test3"]);
+    expect(result.tests.test1.type).toBe("analog");
+    // One setElementProperty + reset per load.
+    expect(sim.setElementProperty).toHaveBeenCalledTimes(3);
+    expect(sim.setElementProperty).toHaveBeenCalledWith("output", "Resistance", 100);
+    expect(sim.reset).toHaveBeenCalledTimes(3);
+  });
+
+  it("skips loads that aren't a positive finite resistance", async () => {
+    const { sim } = makeSweepSim();
+    const result = await samplingUtils.captureLoadSweep(sim, {
+      loads: { test1: 1e12, test2: 0, test3: NaN },
+      numSamples: 2,
+    });
+
+    expect(Object.keys(result.tests)).toEqual(["test1"]);
+    expect(sim.setElementProperty).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,0 +1,641 @@
+Power-of-Two Digital Signal Clippings
+
+## Overview
+
+This system is a hardware-based memory controller designed to process captured signal data. It identifies the largest possible power-of-two subset of an acquired data sequence and manages the extraction of these samples from SRAM. This prepares the data for high-efficiency downstream DSP algorithms, such as the Fast Fourier Transform (FFT), which require data lengths of 2^n.
+
+## System Objective
+
+The system must determine the correct power-of-two length from a variable input size and stream exactly that many samples from memory to the output interface.
+
+The system must:
+
+* **Calculate Clip Length:** Determine the value  using digital methods.
+* **Coordinate Memory Access:** Generate sequential 8-bit addresses to read samples from the primary SRAM.
+* **Control Data Flow:** Manage the start/stop signals to ensure samples are forwarded to the downstream processing blocks.
+
+## System Objective
+
+The system must identify the relevant data window from an 8-bit length register and manage the sequential transfer of that specific window from SRAM to the output bus.
+
+The system must:
+
+* Calculate Optimal Window: Identify the maximum $2^n$ boundary that fits within the current sample count.
+* Coordinate Memory Retrieval: Execute sequential addressing of the primary SRAM device based on the determined boundary.
+* Manage Data Interfacing: Stream exactly 2^n bytes of data while providing handshaking signals to the downstream processor.
+
+## Technical Constraints & Specifications
+
+| Feature | Specification |
+| --- | --- |
+| Input Data Width | 8-bit (Unsigned Char) |
+| Address Bus | 8-bit (256 bytes max) |
+| Memory Type | Standard Asynchronous or Synchronous SRAM |
+| Throughput | 1 sample per clock cycle |
+| Control Logic | Finite State Machine (FSM) |
+
+## Testbench
+
+$ 1 0.000001 382.76258214399064 50 5 50 5e-11
+x -555 -918 -350 -915 4 24 no.\ssamples\sSRAM
+x -942 -846 -785 -843 4 24 universal\sclock
+L -512 -880 -560 -880 0 1 false 5 0
+L -416 -880 -384 -880 0 0 false 5 0
+w -512 -624 -512 -656 0
+w -512 -656 -512 -688 0
+w -512 -688 -512 -720 0
+L -512 -720 -592 -720 0 0 false 5 0
+413 -512 -880 -448 -880 0 4 8 0 247 -1 -2
+413 -160 -352 -96 -352 0 8 8 0 128 129 130 133 137 141 145 150 154 158 161 163 164 164 164 162 161 159 157 155 153 151 150 148 147 146 144 143 141 138 135 132 128 124 121 117 114 111 108 106 103 100 97 94 89 84 78 72 65 57 49 42 36 30 27 26 27 31 38 48 60 75 91 109 128 147 165 181 196 208 218 225 229 230 229 226 220 214 207 199 192 184 178 172 167 162 159 156 153 150 148 145 142 139 135 132 128 124 121 117 114 111 108 106 103 100 97 94 89 84 78 72 65 57 49 42 36 30 27 26 27 31 38 48 60 75 91 109 128 147 165 181 196 208 218 225 229 230 229 226 220 214 207 199 192 184 178 172 167 162 159 156 153 150 148 145 142 139 135 132 128 124 121 117 114 111 108 106 103 100 97 94 89 84 78 72 65 57 49 42 36 30 27 26 27 31 38 48 60 75 91 109 128 146 163 179 192 202 209 214 216 216 213 209 203 196 189 182 175 169 163 159 154 151 148 145 143 141 140 138 136 134 132 130 128 126 125 123 122 121 120 120 119 118 118 117 116 116 115 114 113 112 112 112 112 113 114 115 117 119 121 123 125 126 127 128 -1 -2
+L -160 -352 -192 -352 0 1 false 5 0
+L -64 -352 -32 -352 0 0 false 5 0
+207 0 -864 96 -864 4 Output7
+207 0 -832 96 -832 4 Output6
+207 0 -768 96 -768 4 Output4
+207 0 -800 96 -800 4 Output5
+207 0 -672 96 -672 4 Output1
+207 0 -640 96 -640 4 Output0
+207 0 -704 96 -704 4 Output2
+207 0 -736 96 -736 4 Output3
+x 67 -894 139 -891 4 24 Output
+R -736 -816 -832 -816 0 2 99000 2.5 2.5 0 0.5
+207 -736 -816 -736 -880 4 clk
+w -736 -816 -688 -816 0
+! MSB\spriority\sencoder 0 A7,\sA6,\sA5,\sA4,\sA3,\sA2,\sA1,\sA0 O7,\sO6,\sO5,\sO4,\sO3,\sO2,\sO1,\sO0 MSB\spriority\sencoder 1???????\q10000000\n01??????\q01000000\n001?????\q00100000\n0001????\q00010000\n00001???\q00001000\n000001??\q00000100\n0000001?\q00000010\n00000001\q00000001\n00000000\q00000000\n
+208 -416 -848 -400 -848 0 MSB\spriority\sencoder 5 0 0 0 0 0 0 0
+419 592 -848 608 -848 0 8
+164 -688 -592 -672 -592 0 8 0 0 0 0 0 0 0 0 false 0
+207 -688 -592 -736 -592 4 clk
+! 8bit\scomparator 0 A7,\sA6,\sA5,\sA4,\sA3,\sA2,\sA1,\sA0,\sB7,\sB6,\sB5,\sB4,\sB3,\sB2,\sB1,\sB0 Eq,\sA>,\sA< 8bit\scomparator 1???????0???????\q010\nA1??????A0??????\q010\nAB1?????AB0?????\q010\nABC1????ABC0????\q010\nABCD1???ABCD0???\q010\nABCDE1??ABCDE0??\q010\nABCDEF1?ABCDEF0?\q010\nABCDEFG1ABCDEFG0\q010\nABCDEFGHABCDEFGH\q100\n????????????????\q001\n
+208 -320 -848 -304 -848 0 8bit\scomparator 0 5 0
+w -592 -592 -320 -592 0
+w -592 -560 -320 -560 0
+w -592 -528 -320 -528 0
+w -592 -496 -320 -496 0
+w -592 -464 -320 -464 0
+w -592 -432 -320 -432 0
+w -592 -400 -320 -400 0
+w -592 -368 -320 -368 0
+w -320 -368 -320 -96 0
+w -320 -400 -320 -128 0
+w -320 -432 -320 -160 0
+w -320 -464 -320 -192 0
+w -320 -496 -320 -224 0
+w -320 -528 -320 -256 0
+w -320 -560 -320 -288 0
+w -320 -592 -320 -320 0
+207 -224 -784 -160 -784 4 counter_reset
+207 -784 -336 -848 -336 4 counter_reset
+w -320 -320 -160 -320 0
+w -320 -288 -160 -288 0
+w -320 -256 -160 -256 0
+w -320 -224 -160 -224 0
+w -320 -192 -160 -192 0
+w -320 -160 -160 -160 0
+w -320 -128 -160 -128 0
+w -320 -96 -160 -96 0
+155 -784 -368 -752 -368 0 5
+L -784 -368 -816 -368 0 1 false 5 0
+166 208 -352 240 -352 0 8
+R 304 -128 400 -128 0 0 40 5 0 0 0.5
+w 304 -352 416 -352 0
+! 0\smux 0 sel,A7,\sA6,\sA5,\sA4,\sA3,\sA2,\sA1,\sA0 O7,\sO6,\sO5,\sO4,\sO3,\sO2,\sO1,\sO0 0\smux 1ABCDEFGH\qABCDEFGH\n0????????\q00000000\n
+208 112 -352 144 -352 0 0\smux 0 0 0 0 0 0 0 0
+w -64 -96 112 -96 0
+w -64 -128 112 -128 0
+w -64 -160 112 -160 0
+w -64 -192 112 -192 0
+w -64 -224 112 -224 0
+w -64 -256 112 -256 0
+w -64 -288 112 -288 0
+w -64 -320 112 -320 0
+207 112 -352 64 -352 4 pull_to_0
+207 -688 -304 -688 -256 4 pull_to_0
+w -224 -848 -176 -848 0
+o 59 8 0 4099 5 0.00009765625 0 2 59 3
+o 71 8 0 4099 5 0.00009765625 1 2 71 3
+
+
+6 cycles
+0: 128 147 165 182 199 213 226 237
+8: 245 251 254 255 253 248 240 230
+16: 218 204 188 171 153 134 116 97
+24: 79 63 47 34 22 13 6 2
+32: 1 2 6 13 22 34 47 63
+40: 79 97 116 134 153 171 188 204
+48: 218 230 240 248 253 255 254 251
+56: 245 237 226 213 199 182 165 147
+64: 128 109 91 74 57 43 30 19
+72: 11 5 2 1 3 8 16 26
+80: 38 52 68 85 103 122 140 159
+88: 177 193 209 222 234 243 250 254
+96: 255 254 250 243 234 222 209 193
+104: 177 159 140 122 103 85 68 52
+112: 38 26 16 8 3 1 2 5
+120: 11 19 30 43 57 74 91 109
+128: 128 147 165 182 199 213 226 237
+136: 245 251 254 255 253 248 240 230
+144: 218 204 188 171 153 134 116 97
+152: 79 63 47 34 22 13 6 2
+160: 1 2 6 13 22 34 47 63
+168: 79 97 116 134 153 171 188 204
+176: 218 230 240 248 253 255 254 251
+184: 245 237 226 213 199 182 165 147
+192: 128 109 91 74 57 43 30 19
+200: 11 5 2 1 3 8 16 26
+208: 38 52 68 85 103 122 140 159
+216: 177 193 209 222 234 243 250 254
+224: 255 254 250 243 234 222 209 193
+232: 177 159 140 122 103 85 68 52
+240: 38 26 16 8 3 1 2 5
+248: 11 19 30 43 57 74 91 109
+
+saw tooth
+0: 0 17 33 48 63 76 88 99
+8: 110 120 129 137 145 153 160 166
+16: 172 178 183 188 193 197 201 204
+24: 208 211 214 217 219 222 224 226
+32: 228 230 232 233 235 236 237 239
+40: 240 241 242 237 221 206 192 179
+48: 167 155 145 135 126 117 109 102
+56: 95 88 82 77 72 67 62 58
+64: 54 50 47 44 41 38 35 33
+72: 31 29 27 25 23 22 20 19
+80: 18 16 15 14 13 12 12 28
+88: 44 58 71 84 95 106 116 126
+96: 135 143 150 157 164 170 176 181
+104: 186 191 195 199 203 207 210 213
+112: 216 219 221 223 225 227 229 231
+120: 233 234 236 237 238 239 240 241
+128: 242 226 211 196 183 170 159 148
+136: 138 129 120 112 104 97 91 84
+144: 79 73 68 64 59 55 52 48
+152: 45 42 39 36 34 32 29 27
+160: 26 24 22 21 19 18 17 16
+168: 15 14 13 6 23 39 53 67
+176: 80 92 103 113 123 132 140 148
+184: 155 162 168 174 180 185 190 194
+192: 198 202 206 209 212 215 218 220
+200: 223 225 227 229 231 232 234 235
+208: 237 238 239 240 241 242 231 216
+216: 201 187 175 163 152 141 132 123
+224: 114 107 99 93 86 81 75 70
+232: 65 61 57 53 49 46 43 40
+240: 37 35 32 30 28 26 24 23
+248: 21 20 18 17 16 15 14 13
+
+sound looking signal
+0: 128 129 130 133 137 141 145 150
+8: 154 158 161 163 164 164 164 162
+16: 161 159 157 155 153 151 150 148
+24: 147 146 144 143 141 138 135 132
+32: 128 124 121 117 114 111 108 106
+40: 103 100 97 94 89 84 78 72
+48: 65 57 49 42 36 30 27 26
+56: 27 31 38 48 60 75 91 109
+64: 128 147 165 181 196 208 218 225
+72: 229 230 229 226 220 214 207 199
+80: 192 184 178 172 167 162 159 156
+88: 153 150 148 145 142 139 135 132
+96: 128 124 121 117 114 111 108 106
+104: 103 100 97 94 89 84 78 72
+112: 65 57 49 42 36 30 27 26
+120: 27 31 38 48 60 75 91 109
+128: 128 147 165 181 196 208 218 225
+136: 229 230 229 226 220 214 207 199
+144: 192 184 178 172 167 162 159 156
+152: 153 150 148 145 142 139 135 132
+160: 128 124 121 117 114 111 108 106
+168: 103 100 97 94 89 84 78 72
+176: 65 57 49 42 36 30 27 26
+184: 27 31 38 48 60 75 91 109
+192: 128 146 163 179 192 202 209 214
+200: 216 216 213 209 203 196 189 182
+208: 175 169 163 159 154 151 148 145
+216: 143 141 140 138 136 134 132 130
+224: 128 126 125 123 122 121 120 120
+232: 119 118 118 117 116 116 115 114
+240: 113 112 112 112 112 113 114 115
+248: 117 119 121 123 125 126 127 128
+
+Charging an RC car
+
+## Overview
+
+Design an onboard charging module for an RC car, enabling it to recharge a single-cell (3.7V) Lithium-Ion battery directly from South African mains (230 V RMS, 50 Hz). The module integrates a step-down AC-DC conversion stage and a linear charging controller based on the TP4056 IC to provide a safe and regulated Constant Current/Constant Voltage (CC/CV) charging profile.
+
+## System Objective
+
+The system must safely rectify and regulate 230 V AC mains down to a stable 5 V DC supply to feed a TP4056-based Battery Management System (BMS).
+
+The system must:
+
+* **Provide Galvanic Isolation:** to protect the user and the RC car’s sensitive electronics from high-voltage mains.
+* **Regulate Output to 5 V:** Maintain an input voltage between 4.5 V and 5.5 V for the TP4056 IC.
+
+## Operating Principle
+
+High-level explanation of the power flow from the wall socket to the battery.
+
+1. **Step-Down:** A module to step down the 230 V AC to a lower AC voltage.
+2. **Rectification:** rectify the lower AC voltage into a pulsating DC.
+3. **Filtering:** smooth the ripples.
+4. **Regulation:** provide a constant ~5V DC under changing load
+
+## Technical Constraints & Specifications
+
+| Feature | Specification |
+| --- | --- |
+| Input Source | 230 V RMS, 50 Hz (South African Standard) |
+| output | 5 V DC (Stable) |
+| Battery Chemistry | Lithium-Ion (Single Cell, 3.7 V Nominal) |
+|minimum load| $100\Omega$|
+|maximum load| $10k\Omega$|
+
+$ 1 0.001 382.76258214399064 50 5 50 5e-11
+v 144 368 144 304 0 1 50 325 0 0 0.5
+207 144 304 144 256 4 input
+207 144 304 208 304 4 mains
+g 144 368 144 400 0 0
+p 768 304 768 448 3 0 0 10000
+x 859 293 925 296 4 24 output
+207 816 304 880 304 4 BMS
+w 624 304 576 304 0
+T 336 304 432 368 0 4 0.05 -93.16033243422294 1865.323048033927 0.999
+207 336 304 288 304 4 mains
+g 336 368 336 400 0 0
+g 432 368 432 400 0 0
+w 432 304 480 304 0
+d 480 384 480 304 2 default
+d 480 304 576 304 2 default
+d 576 384 576 304 2 default
+d 480 384 576 384 2 default
+g 576 384 576 416 0 0
+w 480 384 480 448 0
+w 480 448 624 448 0
+c 720 304 720 448 4 0.000009999999999999999 5.33215218160437 0.001 0.1
+w 624 448 672 448 0
+w 672 304 720 304 0
+w 672 448 720 448 0
+34 zener-5 1 1.7143528192810002e-7 0 2.0000000000000084 5 1
+z 672 448 672 304 2 zener-5
+c 624 304 624 448 4 0.00009999999999999999 5.332200196933345 0.001 0.1
+w 720 304 768 304 0
+w 720 448 768 448 0
+w 768 304 816 304 0
+w 624 304 672 304 0
+o 4 1 0 4098 20 0.1 0 1
+
+
+
+Ultrasonic distance sensor
+
+# Overview
+
+Ultrasonic sensors like the **HC-SR04** are essential for non-contact distance measurement. They are immune to the color or transparency of objects, making them more versatile than infrared sensors in many environments. You are tasked with designing a high-precision digital controller to interface with this sensor and provide an analog output proportional to the detected distance.
+
+# System Objective
+
+Design a digital logic system (FPGA or Microcontroller-based) that orchestrates the pulse-echo cycle, processes the high-speed timing data, and drives an analog output.
+
+The system must:
+
+- Generate a precise Trigger pulse to initiate measurement.
+- Time the Echo signal with high resolution to determine the Time-of-Flight (ToF).
+- Drive an 8-bit DAC to represent the distance as a voltage between  0V and 5V.
+
+# Operating Principle
+
+The measurement follows:
+
+1. Triggering: The controller sends a 24$\mu s$ high pulse to the sensor's `TRIG` pin.
+2. Sonic Burst: The sensor emits an 3-cycle burst of ultrasound at 20kHz.
+3. Echo Timing: The sensor's `ECHO` pin is low (with noise). It remains low until the reflection is received.
+4. Calculation: The distance is calculated based on the duration the `ECHO` pin remained high.
+
+The physics of the measurement is defined by:
+
+$$
+\text{distance} = \frac{v_{sound}\times t}{2}
+$$
+
+### Technical Constraints & Specifications
+
+| Feature | Specification |
+| --- | --- |
+| Clock |  $f_{clk}=100kHz$ |
+| Output | 8-bit DAC $\in(0V, 5V)$ |
+| Constant | $v_{sound} = 340m \pm 13\%\text{error}$)  |
+
+
+**Design Constraints**
+
+* System clock frequency is fixed and known
+* Echo signal may be asynchronous to the system clock
+* Maximum measurable distance is 25.5mm
+
+$ 3 0.000001 4.621633621589249 50 5 50 5e-11
+212 -128 -40 -88 -40 0 2 b>0\s?\sa\s:\s0
+R 120 200 72 200 0 2 1500 2.5 2.5 0 0.2
+R 120 152 72 152 0 2 20000 5 0 0 0.5
+g -32 -8 -32 32 0 0
+g -24 312 -24 352 0 0
+R -168 312 -192 312 0 2 1500 5 0 0 0.8
+212 -120 280 -80 280 0 3 b>0\s?\s0.5*a\pc\s:\s0
+I -168 312 -120 312 0 0.5 5
+w -232 -40 -128 -40 0
+w -232 -40 -232 280 0
+w -232 280 -120 280 0
+207 120 280 176 280 4 echo
+207 120 -40 184 -40 4 pulse
+R -120 344 -192 344 0 6 40 1 0 0 0.5
+207 120 200 192 200 4 pulse_seq
+207 -128 -8 -168 -8 4 pulse_seq
+207 120 152 192 152 4 pulse_gen
+207 -232 -40 -296 -40 4 pulse_gen
+R 120 96 72 96 0 2 100000 2.5 2.5 0 0.5
+207 120 96 192 96 4 clk
+w -32 -40 120 -40 0
+b -347 -69 119 376 0
+x -181 -82 0 -79 4 24 ultrasonic\ssensor
+166 504 88 536 88 1 8
+v 552 272 552 200 0 0 40 5 0 0 0.5
+g 552 272 552 312 0 0
+p 608 88 608 272 1 0 0 1000000000000
+w 552 272 608 272 0
+w 552 88 608 88 0
+x 591 70 657 73 4 24 output
+212 0 280 40 280 0 2 a\pb
+w -24 280 0 280 0
+R 0 312 0 344 0 6 40 1 0 0 0.5
+g 96 312 96 344 0 0
+w 96 280 120 280 0
+164 408 88 424 88 1 8 0 0 0 0 0 0 0 0 false 0
+207 408 88 368 88 4 clk
+207 296 264 296 296 4 pulse_seq
+207 344 200 320 200 4 echo
+182 344 200 408 200 0 0.5 1.66 3.33 5 0
+168 456 88 464 88 3 8 0 0 0 0 0 0 0 0
+w 408 200 408 216 0
+w 408 216 456 216 0
+o 11 1 0 4099 5 0.00009765625 0 6 11 3 12 0 12 3 12 0 12 3
+o 26 1 0 4098 0.0000762939453125 0.1 1 1
+
+
+
+Sinusoidal PWM Generator
+
+## Overview
+
+Design an sPWM generator to serve as the primary control block for a single-phase inverter. This module generates the high-frequency switching patterns required to drive power MOSFETs in an H-bridge configuration, transforming a static DC bus into a 50 Hz AC output.
+
+## System Objective
+
+Design a digital control architecture that produces high-precision, complementary PWM gate signals representing a 50 Hz fundamental frequency.
+
+The system must:
+
+* **Synthesize Reference and Carrier Waves:** Generate a stable 50 Hz sinusoidal reference and a high-frequency triangular carrier signal.
+* **Execute Pulse Width Modulation:** Compare the instantaneous values of both waveforms to produce a variable-width pulse stream.
+* **Output Complementary Signal Pairs:** Generate a primary PWM signal and its logical inverse to drive a half-bridge leg.
+* **Ensure Frequency Stability:** Maintain the fundamental 50 Hz output to meet standard residential AC requirements.
+
+## Operating Principle
+
+Design the system to execute the following functional sequence:
+
+1. **Compare Waveforms:** Continuously evaluate the amplitude of a 50 Hz sinusoidal reference against a high-frequency triangular carrier.
+2. **Toggle Logic States:** Drive the PWM output "High" when the sine wave amplitude exceeds the triangle wave, and "Low" otherwise.
+3. **Invert Outputs:** Invert the resulting PWM stream to create a second, synchronized control signal for the opposite switch in the inverter leg.
+
+## Technical Constraints & Specifications
+
+| Feature | Specification |
+| --- | --- |
+| Fundamental Frequency | 50 Hz |
+| Reference Amplitude | 5 V Max |
+| Output Type | Dual Complementary CMOS Logic |
+| Topology | Single-Phase H-Bridge Control |
+
+$ 1 0.000005 78.57719942274176 50 5 50 5e-11
+w -432 160 -432 208 0
+c -608 128 -608 208 4 0.00001 0.001 0.001 0.1
+c -608 208 -608 240 4 0.00001 0.001 0.001 0
+g -608 240 -608 256 0 0
+g -432 240 -432 256 0 0
+R -608 128 -656 128 0 0 40 12 0 0 0.5
+w -608 128 -432 128 0
+207 -448 224 -480 224 4 !sPWM
+207 -448 144 -480 144 4 sPWM
+p -192 192 -192 256 3 0 0 10000000
+w -608 208 -608 192 0
+w -608 192 -368 192 0
+w -432 208 -400 208 0
+w -368 256 -288 256 0
+l -368 192 -288 192 0 0.1 0 0
+c -288 192 -288 256 4 0.000009999999999999999 0.001 0.001 0
+w -288 256 -192 256 0
+w -288 192 -192 192 0
+207 -704 32 -608 32 4 sPWM
+207 -704 -48 -608 -48 4 !sPWM
+x -494 68 -293 71 4 24 half-bridge\sInverter
+b -672 80 -141 324 0
+159 -432 128 -432 160 2 20 10000000000 2.5
+159 -432 208 -432 240 2 20 10000000000 2.5
+d -384 160 -384 128 2 default
+w -432 128 -384 128 0
+w -432 160 -384 160 0
+d -400 240 -400 208 2 default
+w -432 240 -400 240 0
+w -400 208 -368 208 0
+w -368 208 -368 256 0
+a -1264 -112 -1152 -112 8 15 -15 1000000 0 0 100000
+r -1152 -112 -1152 -16 0 10000
+r -1152 -112 -1024 -112 0 2000
+r -1152 -16 -1024 -16 0 3300
+g -1264 -128 -1328 -128 0 0
+w -1264 -96 -1264 -16 0
+w -1264 -16 -1152 -16 0
+a -1024 -96 -912 -96 8 15 -15 1000000 0 0 100000
+w -1024 -16 -912 -16 0
+w -912 -96 -912 -16 0
+w -912 -96 -912 -160 0
+w -1024 -112 -1024 -160 0
+c -1024 -160 -912 -160 4 0.000001 0.001 0.001 0
+g -1024 -80 -1024 -48 0 0
+w -912 -96 -816 -96 0
+R -848 -192 -880 -192 0 1 50 5 0 0 0.5
+w -848 -192 -736 -192 0
+w -912 176 -816 176 0
+g -1024 192 -1024 224 0 0
+c -1024 112 -912 112 4 0.000001 0.001 0.001 0
+w -1024 160 -1024 112 0
+w -912 176 -912 112 0
+w -912 176 -912 256 0
+a -1024 176 -912 176 8 15 -15 1000000 0 0 100000
+w -1264 176 -1264 256 0
+r -1264 256 -912 256 0 1000
+r -1152 160 -1024 160 0 1000
+a -1264 160 -1152 160 8 15 -15 1000000 0 0 100000
+w -1264 144 -1312 144 0
+r -1312 144 -1312 224 0 1000
+g -1312 224 -1312 256 0 0
+c -1264 256 -1264 320 4 0.000001 0.001 0.001 0
+g -1264 320 -1264 352 0 0
+w -1152 160 -1152 80 0
+w -1264 144 -1264 80 0
+c -1264 80 -1152 80 4 0.000001 0.001 0.001 0
+w -1152 80 -1136 80 0
+a -816 32 -704 32 9 15 -15 1000000 0 0 100000
+w -816 -96 -816 16 0
+w -816 48 -816 176 0
+I -704 32 -704 -48 0 0.5 5
+o 45 64 0 4099 10 0.00009765625 0 4 45 3 47 0 47 3
+o 67 64 0 4099 20 0.00009765625 1 4 67 3 47 0 47 3
+o 9 64 0 4098 40 0.1 2 1
+
+
+PV inverter for household supply
+
+## Overview
+
+This design outlines a standalone residential solar inverter responsible for converting high-voltage DC power from a Photovoltaic (PV) array into stable AC power. Unlike grid-tied systems, this standalone unit must regulate its own frequency and voltage to support household appliances directly, acting as the primary energy source for the domestic AC bus.
+
+## System Objective
+
+The system must convert variable high-voltage DC into a regulated, clean sinusoidal AC output suitable for standard residential use.
+
+The system must:
+
+* **Perform DC to AC Conversion:** Transform the ~400 V DC input into a single-phase AC signal with a peak of 325 V to achieve the target RMS.
+* **Implement sPWM Control:** Utilize Sinusoidal Pulse Width Modulation to drive the switching power electronics, ensuring the fundamental frequency is accurately maintained.
+* **Ensure Harmonic Suppression:** Attenuate high-frequency switching noise to provide a pure sine wave, protecting sensitive inductive and electronic household loads.
+
+## Operating Principle
+
+High-level explanation of the power transformation and control sequence.
+
+1. **Pulse Generation:** A high-frequency triangular carrier wave is compared against a 50 Hz reference sine wave to generate sPWM switching signals.
+2. **H-Bridge Switching:** The sPWM signals drive an H-bridge inverter (using MOSFETs or IGBTs) to chop the 400 V DC into a series of variable-width pulses.
+3. **Low-Pass Filtering:** An LC (Inductor-Capacitor) filter removes the high-frequency switching components, smoothing the pulses into a clean **230 V RMS** sinusoidal waveform.
+
+## Technical Constraints & Specifications
+
+| Feature | Specification |
+| --- | --- |
+| Source | 400 V DC (PV Array) |
+| Output | 230 V RMS  |
+| Peak Voltage | 325 V |
+| Frequency | 50 Hz |
+
+$ 0 0.0000049999999999999996 18.278915558614752 50 5 50 5e-11
+207 -304 -144 -304 -112 4 input
+x -398 -193 -305 -190 4 24 PV\sarray
+x -447 -67 -275 -64 4 24 signal\sgenerator
+207 -336 -32 -256 -32 4 sine
+207 -336 32 -256 32 4 triangle
+207 -336 96 -256 96 4 -sine
+207 -304 -144 -224 -144 4 pv_output
+b -157 145 -489 -220 0
+v -400 -144 -304 -144 0 0 2 400 0 0 0.5
+g -400 -144 -400 -112 0 0
+R -336 -32 -416 -32 0 1 50 2.5 2.5 0 0.5
+R -336 32 -416 32 0 3 5000 3 3 0 0.5
+R -336 96 -416 96 0 1 50 2.5 2.5 3.141592653589793 0.5
+p 576 -32 576 64 1 0 0 1000000000000
+x 587 -43 653 -40 4 24 output
+207 -16 -336 -64 -336 4 triangle
+207 -16 -304 -64 -304 4 sine
+w -16 -336 -16 -208 0
+207 -16 -176 -64 -176 4 -sine
+207 112 -192 176 -192 4 sPWM2
+207 112 -320 176 -320 4 sPWM1
+I 112 -192 112 -112 0 0.5 5
+207 112 -240 176 -240 4 !sPWM1
+207 112 -112 176 -112 4 !sPWM2
+I 112 -320 112 -240 0 0.5 5
+207 160 80 112 80 4 sPWM1
+207 160 -32 112 -32 4 !sPWM1
+207 336 80 288 80 4 sPWM2
+w 176 -48 176 -64 0
+w 352 -48 352 -64 0
+w 224 -64 176 -64 0
+w 176 64 176 32 0
+w 176 -16 176 32 0
+w 176 32 224 32 0
+w 352 -16 352 0 0
+w 352 64 352 0 0
+w 352 0 384 0 0
+g 176 96 176 144 0 0
+g 352 96 352 144 0 0
+207 176 -64 112 -64 4 pv_output
+159 176 -48 176 -16 2 20 10000000000 2.5
+159 352 -48 352 -16 2 20 10000000000 2.5
+159 352 64 352 96 2 20 10000000000 2.5
+159 176 64 176 96 2 20 10000000000 2.5
+c 528 -32 528 64 4 0.000009999999999999999 308.4855234932271 0.001 0
+l 528 -32 416 -32 0 0.1 -0.5279611645909986 0
+w 416 -32 416 0 0
+w 416 32 416 64 0
+w 416 64 528 64 0
+w 528 64 576 64 0
+w 528 -32 576 -32 0
+r 400 -288 512 -288 0 10000
+a -16 -320 112 -320 8 15 -15 1000000 0.23960719020098242 0.2999999950063099 100000
+a -16 -192 112 -192 8 15 -15 1000000 4.760392809799013 0.2999999950063099 100000
+d 224 -16 224 -64 2 default
+w 176 -16 224 -16 0
+w 224 -64 352 -64 0
+w 352 -64 384 -64 0
+d 384 0 384 -64 2 default
+d 384 96 384 32 2 default
+w 352 96 384 96 0
+d 224 96 224 32 2 default
+w 176 96 224 96 0
+w 224 32 384 32 0
+w 384 32 416 32 0
+w 384 0 416 0 0
+207 336 -32 288 -32 4 !sPWM2
+o 13 32 0 12290 0.0001 0.0001 0 1
+o 6 128 0 4098 640 0.1 1 1
+
+frequency mixing for speed measurement:
+
+$ 3 0.000001 382.76258214399064 50 5 50 5e-11
+212 -128 -40 -88 -40 0 2 b>0\s?\sa\s:\s0
+R 120 200 72 200 0 2 1500 2.5 2.5 0 0.2
+R 120 152 72 152 0 1 20000 5 0 0 0.5
+g -32 -8 -32 32 0 0
+g -24 312 -24 352 0 0
+R -168 312 -192 312 0 2 1500 5 0 0 0.8
+212 -120 280 -80 280 0 3 b>0\s?\s0.5*a\pc\s:\s0
+I -168 312 -120 312 0 0.5 5
+w -232 -40 -128 -40 0
+w -232 -40 -232 280 0
+w -232 280 -120 280 0
+207 120 280 176 280 4 echo
+207 120 -40 184 -40 4 pulse
+R -120 344 -192 344 0 6 40 1 0 0 0.5
+207 120 200 192 200 4 pulse_seq
+207 -128 -8 -168 -8 4 pulse_seq
+207 120 152 192 152 4 pulse_gen
+207 -232 -40 -296 -40 4 pulse_gen
+R 120 96 72 96 0 2 100000 2.5 2.5 0 0.5
+207 120 96 192 96 4 clk
+w -32 -40 120 -40 0
+b -347 -69 119 376 0
+x -181 -82 0 -79 4 24 ultrasonic\ssensor
+166 352 104 384 104 1 8
+v 400 288 400 216 0 0 40 5 0 0 0.5
+g 400 288 400 328 0 0
+p 456 104 456 288 1 0 0 1000000000000
+w 400 288 456 288 0
+w 400 104 456 104 0
+x 439 86 505 89 4 24 output
+212 0 280 40 280 0 2 a\pb
+w -24 280 0 280 0
+R 0 312 0 344 0 6 40 1 0 0 0.5
+g 96 312 96 344 0 0
+w 96 280 120 280 0
+o 11 4 0 4099 5 0.00009765625 0 6 11 3 12 0 12 3 12 0 12 3
+o 26 4 0 4098 0.0000762939453125 0.1 1 1

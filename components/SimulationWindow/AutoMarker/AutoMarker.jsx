@@ -31,58 +31,88 @@ export default function AutoMarker({
   useEffect(() => { activeTestTabRef.current = activeTestTab; }, [activeTestTab]);
 
   // C1: grading moved server-side — POST to /api/grade instead of running
-  // gradingUtils/signalUtils in the browser.
+  // gradingUtils/signalUtils in the browser. Grades a single test key against
+  // one capture; throws on a server error so callers can decide whether to
+  // continue (load sweep) or surface it (single submit).
+  const gradeOne = useCallback(async (testKey, data) => {
+    const capturedPayload = testType === "digital"
+      ? { table: data.table }
+      : {
+          output: data.data?.output || [],
+          input: data.data?.input || [],
+          timeLabels: data.timeLabels,
+          sampleRate: data.sampleRate,
+        };
+
+    // Send the Firebase ID token — server extracts uid from it, never trusts body.
+    const token = await user?.getIdToken?.() || null;
+    const res = await fetch("/api/grade", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+      },
+      // topics / testType / testbench are intentionally NOT sent — the
+      // server reads them from the problem document so a client can't
+      // substitute lenient grading parameters.
+      body: JSON.stringify({
+        problemId,
+        testKey,
+        capturedData: capturedPayload,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Server error ${res.status}`);
+    }
+
+    const { testResult, isCompleted } = await res.json();
+    setTestSuite(prev => ({ ...prev, [testKey]: testResult }));
+    if (isCompleted) onCompleted?.();
+  }, [problemId, testType, user, setTestSuite, onCompleted]);
+
+  // Single-capture grade (signal/digital, or one tab).
   const gradeTest = useCallback(async (testKey, data) => {
     setIsProcessing(true);
     try {
-      const capturedPayload = testType === "digital"
-        ? { table: data.table }
-        : {
-            output: data.data?.output || [],
-            input: data.data?.input || [],
-            timeLabels: data.timeLabels,
-            sampleRate: data.sampleRate,
-          };
-
-      // Send the Firebase ID token — server extracts uid from it, never trusts body.
-      const token = await user?.getIdToken?.() || null;
-      const res = await fetch("/api/grade", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
-        },
-        // topics / testType / testbench are intentionally NOT sent — the
-        // server reads them from the problem document so a client can't
-        // substitute lenient grading parameters.
-        body: JSON.stringify({
-          problemId,
-          testKey,
-          capturedData: capturedPayload,
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `Server error ${res.status}`);
-      }
-
-      const { testResult, isCompleted } = await res.json();
-      setTestSuite(prev => ({ ...prev, [testKey]: testResult }));
-      if (isCompleted) onCompleted?.();
+      await gradeOne(testKey, data);
     } catch (err) {
       console.error("Grading failed:", err);
     } finally {
       setIsProcessing(false);
     }
-  }, [problemId, testType, user, setTestSuite, onCompleted]);
+  }, [gradeOne]);
+
+  // Load-sweep grade: one Submit produced all three load captures, so grade
+  // them in sequence. A failure on one test is logged but doesn't abort the
+  // others — the server still accumulates per-test progress.
+  const gradeSweep = useCallback(async (tests) => {
+    setIsProcessing(true);
+    try {
+      for (const key of ["test1", "test2", "test3"]) {
+        if (!tests[key]) continue;
+        try {
+          await gradeOne(key, tests[key]);
+        } catch (err) {
+          console.error(`Grading ${key} failed:`, err);
+        }
+      }
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [gradeOne]);
 
   useEffect(() => {
     if (!capturedData || capturedData === lastProcessedDataRef.current) return;
     lastProcessedDataRef.current = capturedData;
-    const tabKey = testType === "signal" ? "test1" : activeTestTabRef.current;
-    gradeTest(tabKey, capturedData);
-  }, [capturedData, gradeTest, testType]);
+    if (capturedData.type === "loadSweep" && capturedData.tests) {
+      gradeSweep(capturedData.tests);
+    } else {
+      const tabKey = testType === "signal" ? "test1" : activeTestTabRef.current;
+      gradeTest(tabKey, capturedData);
+    }
+  }, [capturedData, gradeTest, gradeSweep, testType]);
 
   const isDigital = testType === "digital";
   const isSignal = testType === "signal";

@@ -1,7 +1,7 @@
-# Ohmify — Claude Context
+# Scope.io — Claude Context
 
 ## What this project is
-Ohmify is a LeetCode-style platform for electronics engineers. Users browse problems, build circuits in an embedded CircuitJS simulator, submit them, and get automated graded feedback. Think "competitive programming judge" but for circuits.
+Scope.io is a LeetCode-style platform for electronics engineers. Users browse problems, build circuits in an embedded CircuitJS simulator, submit them, and get automated graded feedback. Think "competitive programming judge" but for circuits.
 
 ## Tech stack
 - **Framework**: Next.js (App Router, v16) + React 19

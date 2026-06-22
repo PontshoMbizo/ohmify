@@ -12,7 +12,7 @@ export default function Footer() {
           {/* Branding */}
           <div className="flex flex-col gap-6">
             <div>
-              <h3 className="text-3xl font-black uppercase tracking-tighter">Ohmify</h3>
+              <h3 className="text-3xl font-black uppercase tracking-tighter">Scope.io</h3>
               <p className="mt-4 text-base leading-relaxed opacity-80">
                 An innovative platform designed to help users learn and
                 practice circuit design through interactive problem-solving.
@@ -61,7 +61,7 @@ export default function Footer() {
         </div>
 
         <div className="mt-20 border-t border-white/10 pt-8 text-center text-sm opacity-50">
-          © {new Date().getFullYear()} Ohmify. Designed for future hardware engineers.
+          © {new Date().getFullYear()} Scope.io. Designed for future hardware engineers.
         </div>
       </div>
     </footer>

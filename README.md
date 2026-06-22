@@ -1,6 +1,6 @@
-# Ohmify — Project Architecture
+# Scope.io — Project Architecture
 
-This repository implements Ohmify: a web platform for electronics problem solving that combines authored problems, embedded CircuitJS simulations, and automated verification/grading of circuit solutions.
+This repository implements Scope.io: a web platform for electronics problem solving that combines authored problems, embedded CircuitJS simulations, and automated verification/grading of circuit solutions.
 
 This README documents the project architecture in a hierarchical way: a high-level overview, architecture diagrams, and detailed descriptions of routes, components, data model, and developer/run instructions.
 

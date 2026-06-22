@@ -32,6 +32,18 @@ Source of truth: `lib/samplingUtils.js` (capture) and `components/Simulator.jsx`
 (Max Load Ω, Min Load Ω — both must be > 0). These become the resistances the three
 captures (No-load / Max / Min) are graded at.
 
+**Load problems: label the output voltmeter exactly `output`.**
+- The three loads are now swept **in code**: a single Submit sets the voltmeter's
+  resistance to each load (No-load → Max → Min), resets, and captures each, instead
+  of the solver editing the resistance and submitting three times.
+- This works by `sim.setElementProperty("output", "Resistance", ohms)`, which targets
+  the voltmeter by its label — so the output voltmeter **must carry the label
+  `output`** (lowercase). The same automated sweep captures your golden solution in
+  Creator Studio, so golden and solver captures run through the identical path.
+- If the voltmeter isn't labeled `output`, the load never changes between the three
+  captures: No-load passes but Max/Min fail their golden — i.e. it fails closed (never
+  a false pass), but the problem won't be solvable. Re-label and re-publish to fix.
+
 ---
 
 ## Digital problems (`testType: "digital"`)

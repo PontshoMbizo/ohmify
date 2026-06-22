@@ -11,15 +11,15 @@ export default function Navbar({ color }) {
   const { user, loading, signIn, signOut } = useAuth();
 
   return (
-    <div className="navbar min-h-12 h-12 shadow-xs text-gray-500 bg-base-100 px-4">
+    <div className="navbar min-h-12 h-12 shadow-xs text-base-content/80 bg-base-100 px-4 border-b border-base-200 transition-colors duration-300">
       
       {/* LEFT SECTION (brand) */}
       <div className="navbar-start">
-        <a href="/" className={`flex font-bold items-center ${color ? `text-white` : `text-black`}`}>
+        <a href="/" className={`flex font-bold items-center ${color ? `text-white` : `text-base-content`}`}>
           <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#0d7406" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-omega mx-2">
             <path d="M3 20h4.5a.5.5 0 0 0 .5-.5v-.282a.52.52 0 0 0-.247-.437 8 8 0 1 1 8.494-.001.52.52 0 0 0-.247.438v.282a.5.5 0 0 0 .5.5H21"/>
           </svg>
-          <span className="text-[1.7em] font-bold tracking-wide font-jersey">Ohmify</span>
+          <span className="text-[1.7em] font-bold tracking-wide font-jersey">scope.io</span>
         </a>
       </div>
 
@@ -27,10 +27,10 @@ export default function Navbar({ color }) {
       <div className="navbar-center hidden lg:flex">
         <ul className="menu menu-horizontal px-1 font-medium">
           <li><a className="hover:text-green-600 hover:bg-transparent" href="/problem">Problems</a></li>
-          <li><a className="hover:text-green-500 hover:bg-white" href="/ComingSoon">Contest</a></li>
-          <li><a className="hover:text-green-500 hover:bg-white" href="/ComingSoon">Discuss</a></li>
+          <li><a className="hover:text-green-500 hover:bg-base-200" href="/ComingSoon">Contest</a></li>
+          <li><a className="hover:text-green-500 hover:bg-base-200" href="/ComingSoon">Discuss</a></li>
           {(user?.role === "admin" || user?.role === "creator") && (
-            <li><a className="text-green-600 font-bold hover:text-blue-600 hover:bg-white" href="/create">Create</a></li>
+            <li><a className="text-green-600 font-bold hover:text-blue-600 hover:bg-base-200" href="/create">Create</a></li>
           )}
         </ul>
       </div>
@@ -53,7 +53,7 @@ export default function Navbar({ color }) {
 
             <div className="dropdown dropdown-end">
               <div tabIndex={0} role="button" className="flex items-center font-bold text-xs hover:cursor-pointer"><Bell size={20} />{user?.notifications || 0}</div>
-              <ul tabIndex={0} className="dropdown-content z-[50] menu p-2 shadow-2xl bg-base-100 rounded-box w-64 border border-gray-100 text-[15px] text-gray-700">
+              <ul tabIndex={0} className="dropdown-content z-[50] menu p-2 shadow-2xl bg-base-100 rounded-box w-64 border border-base-300 text-[15px] text-base-content">
                 <li>
                   <a><Bell size={18}/> Notifications</a>
                 </li>
@@ -71,7 +71,7 @@ export default function Navbar({ color }) {
                 </div>
               </div>
               
-              <ul tabIndex={0} className="dropdown-content z-[50] menu p-2 shadow-2xl bg-base-100 rounded-box w-64 border border-gray-100 text-[15px] text-gray-700">
+              <ul tabIndex={0} className="dropdown-content z-[50] menu p-2 shadow-2xl bg-base-100 rounded-box w-64 border border-base-300 text-[15px] text-base-content">
                 {/* Section 1: Account */}
                 <li className="hover-bordered">
                   <a href="/profile"><UserCircle size={18}/> View Profile</a>

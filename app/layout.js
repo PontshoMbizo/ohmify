@@ -15,14 +15,14 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "Ohmify",
+  title: "scope.io",
   description: "Leetcode for electronics engineers",
 };
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+    <html lang="en" data-theme="dim">
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased transition-colors duration-300`}>
         {/* 1. Wrap everything in AuthProvider */}
         <AuthProvider>
           {/* 2. Navbar is now global and has access to Auth Context */}

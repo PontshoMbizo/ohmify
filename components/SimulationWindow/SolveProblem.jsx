@@ -6,7 +6,7 @@ import { GeneralUtils } from "@/lib/GeneralUtils";
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 
-export default function SolveProblem({ circuit, topics = [], testbench, testType, sampleCount }) {
+export default function SolveProblem({ circuit, topics = [], testbench, testType, sampleCount, timeStep }) {
   const { id: problemId } = useParams();
   const [simResults, setSimResults] = useState(null);
   const [isCompleted, setIsCompleted] = useState(false);
@@ -43,6 +43,17 @@ export default function SolveProblem({ circuit, topics = [], testbench, testType
     setIsCompleted(false);
     setShowResetConfirm(false);
   };
+
+  // For load problems, the three testbench resistances drive an automated
+  // No-load / Max / Min sweep inside the simulator (one Submit captures all
+  // three). null for signal/digital, which capture a single waveform.
+  const loads = testType === "load"
+    ? {
+        test1: testbench?.noload ?? 1e12,
+        test2: testbench?.maxload,
+        test3: testbench?.minload,
+      }
+    : null;
 
   if (currentCircuit === null) return null;
 
@@ -106,18 +117,14 @@ export default function SolveProblem({ circuit, topics = [], testbench, testType
         />
       ) : (
         <div className="relative h-full">
-          <button
-            onClick={() => setShowResetConfirm(true)}
-            className="absolute bottom-20 right-4 z-10 text-slate-400 hover:text-red-500 transition-colors text-[10px] font-black uppercase tracking-widest bg-white/80 py-1 px-2 rounded-full border border-slate-200"
-          >
-            Reset Template
-          </button>
           <Simulator
             key={`${problemId}-${resetKey}`}
             circuit={currentCircuit}
             onSubmit={handleSimSubmit}
             isDigital={GeneralUtils.isDigitalProblem(topics)}
+            loads={loads}
             sampleCount={sampleCount}
+            timeStep={timeStep}
           />
         </div>
       )}
