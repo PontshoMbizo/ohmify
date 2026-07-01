@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "baseUrl": "..",
+    "paths": {
+      "@/lib/firebase": ["./.design-sync/.cache/lib-firebase-stub.js"],
+      "@/lib/authUtils": ["./.design-sync/.cache/auth-utils-stub.js"],
+      "@/lib/embedConfig": ["./.design-sync/.cache/embed-config-stub.js"],
+      "@/*": ["./*"],
+      "firebase": ["./.design-sync/.cache/firebase-stub.js"],
+      "firebase/app": ["./.design-sync/.cache/firebase-stub.js"],
+      "firebase/auth": ["./.design-sync/.cache/firebase-stub.js"],
+      "firebase/firestore": ["./.design-sync/.cache/firebase-stub.js"],
+      "firebase/storage": ["./.design-sync/.cache/firebase-stub.js"],
+      "firebase-admin/app": ["./.design-sync/.cache/firebase-stub.js"],
+      "firebase-admin/auth": ["./.design-sync/.cache/firebase-stub.js"],
+      "firebase-admin/firestore": ["./.design-sync/.cache/firebase-stub.js"],
+      "next/link": ["./.design-sync/.cache/next-stub.js"],
+      "next/navigation": ["./.design-sync/.cache/next-stub.js"],
+      "next/dynamic": ["./.design-sync/.cache/next-stub.js"]
+    }
+  }
+}
