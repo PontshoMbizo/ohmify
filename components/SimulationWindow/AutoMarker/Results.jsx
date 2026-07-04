@@ -56,13 +56,19 @@ export default function Results({ chartData }) {
     }
   }), [chartData.type]);
 
+  // The user's spectrum/Bode series come with their own frequency bins
+  // (userFreqLabels) — getFrequencyData skips near-zero bins per call, so the
+  // user's and golden's bin sets can differ. Fall back to the golden's labels
+  // for results graded before userFreqLabels existed.
+  const userFreqLabels = chartData.userFreqLabels || chartData.freqLabels;
+
   const spectrumBounds = useMemo(() => {
-    if (!chartData.userSpectrum || !chartData.freqLabels) return { min: 0, max: undefined };
+    if (!chartData.userSpectrum || !userFreqLabels) return { min: 0, max: undefined };
     let maxIdx = 0, maxVal = -1;
     chartData.userSpectrum.forEach((v, i) => { if (v > maxVal) { maxVal = v; maxIdx = i; } });
-    const peak = parseFloat(chartData.freqLabels[maxIdx]);
+    const peak = parseFloat(userFreqLabels[maxIdx]);
     return { min: Math.max(0, peak * 0.2), max: peak * 5 };
-  }, [chartData.userSpectrum, chartData.freqLabels]);
+  }, [chartData.userSpectrum, userFreqLabels]);
 
   const formatXY = useMemo(() => (labels, dataArr) => {
     if (!labels || !dataArr) return [];
@@ -97,23 +103,23 @@ export default function Results({ chartData }) {
   const spectrumData = useMemo(() => ({
     datasets: [
       { label: "Expected", data: formatXY(chartData.freqLabels, chartData.solutionSpectrum), borderColor: "rgba(59,130,246,0.4)", backgroundColor: "rgba(59,130,246,0.1)", fill: true, pointRadius: 0, borderWidth: 1 },
-      { label: "Your Output", data: formatXY(chartData.freqLabels, chartData.userSpectrum), borderColor: "rgba(34,197,94,1)", backgroundColor: "rgba(34,197,94,0.2)", fill: true, pointRadius: 2, borderWidth: 2 }
+      { label: "Your Output", data: formatXY(userFreqLabels, chartData.userSpectrum), borderColor: "rgba(34,197,94,1)", backgroundColor: "rgba(34,197,94,0.2)", fill: true, pointRadius: 2, borderWidth: 2 }
     ]
-  }), [chartData.freqLabels, chartData.solutionSpectrum, chartData.userSpectrum, formatXY]);
+  }), [chartData.freqLabels, userFreqLabels, chartData.solutionSpectrum, chartData.userSpectrum, formatXY]);
 
   const bodeGainData = useMemo(() => ({
     datasets: [
       { label: "Expected Gain", data: formatXY(chartData.freqLabels, chartData.solutionBodeMag), borderColor: "rgba(59,130,246,0.3)", borderDash: [4,4], pointRadius: 0 },
-      { label: "Your Gain", data: formatXY(chartData.freqLabels, chartData.userBodeMag), borderColor: "#22c55e", pointRadius: 0 }
+      { label: "Your Gain", data: formatXY(userFreqLabels, chartData.userBodeMag), borderColor: "#22c55e", pointRadius: 0 }
     ]
-  }), [chartData.freqLabels, chartData.solutionBodeMag, chartData.userBodeMag, formatXY]);
+  }), [chartData.freqLabels, userFreqLabels, chartData.solutionBodeMag, chartData.userBodeMag, formatXY]);
 
   const bodePhaseData = useMemo(() => ({
     datasets: [
       { label: "Expected Phase", data: formatXY(chartData.freqLabels, chartData.solutionBodePhase), borderColor: "rgba(168,85,247,0.3)", borderDash: [4,4], pointRadius: 0 },
-      { label: "Your Phase", data: formatXY(chartData.freqLabels, chartData.userBodePhase), borderColor: "#f59e0b", pointRadius: 0 }
+      { label: "Your Phase", data: formatXY(userFreqLabels, chartData.userBodePhase), borderColor: "#f59e0b", pointRadius: 0 }
     ]
-  }), [chartData.freqLabels, chartData.solutionBodePhase, chartData.userBodePhase, formatXY]);
+  }), [chartData.freqLabels, userFreqLabels, chartData.solutionBodePhase, chartData.userBodePhase, formatXY]);
 
   return (
     <div className="space-y-6">

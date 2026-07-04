@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Line } from 'react-chartjs-2';
+import { db } from '@/lib/firebase';
+import { collection, getDocs } from 'firebase/firestore';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -28,11 +30,46 @@ export default function SampleSolution({ problem }) {
   const isDigital = problem?.testType === "digital";
   const dt = Number(problem?.timeStep) || 5e-6;
 
+  // Goldens are heavy (packed multi-thousand-sample strings per test), so they
+  // are NOT fetched with the problem doc. This component is always mounted (the
+  // tabs are CSS-only radio inputs) but its tab-content is display:none until
+  // the Solutions tab is selected — so an IntersectionObserver on the root
+  // fires on first open, and only then do we pull the subcollection.
+  const rootRef = useRef(null);
+  const [solutions, setSolutions] = useState(problem?.solutions ?? null);
+  const [loadingSolutions, setLoadingSolutions] = useState(false);
+
+  useEffect(() => {
+    if (solutions || !problem?.id) return;
+    const el = rootRef.current;
+    if (!el) return;
+    let cancelled = false;
+    const observer = new IntersectionObserver(async (entries) => {
+      if (!entries.some((e) => e.isIntersecting)) return;
+      observer.disconnect();
+      setLoadingSolutions(true);
+      try {
+        const snap = await getDocs(collection(db, "Problems", problem.id, "solutionWaveform"));
+        if (cancelled) return;
+        const fetched = {};
+        snap.forEach((d) => { fetched[d.id] = d.data(); });
+        setSolutions(fetched);
+      } catch (err) {
+        console.error("Failed to load reference waveforms:", err);
+        if (!cancelled) setSolutions({});
+      } finally {
+        if (!cancelled) setLoadingSolutions(false);
+      }
+    });
+    observer.observe(el);
+    return () => { cancelled = true; observer.disconnect(); };
+  }, [solutions, problem?.id]);
+
   // Decode a solution slot — handles the packed "f32:" form and legacy text.
   // Solutions may be stored as the full doc ({ samples, decimation }) or, for
   // older shapes, the raw samples string; tolerate both.
   const parseSolutionData = (key) => {
-    const sol = problem?.solutions?.[key];
+    const sol = solutions?.[key];
     if (!sol) return [];
     return decodeWaveform(typeof sol === "string" ? sol : sol.samples);
   };
@@ -40,7 +77,7 @@ export default function SampleSolution({ problem }) {
   // Decimation stride baked into the stored golden (1 = none). The decoded
   // points are spaced `decimation * dt` apart, so the time axis scales by it.
   const solutionDecimation = (key) => {
-    const sol = problem?.solutions?.[key];
+    const sol = solutions?.[key];
     return Number(sol?.decimation) || 1;
   };
 
@@ -52,7 +89,13 @@ export default function SampleSolution({ problem }) {
   ];
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div ref={rootRef} className="space-y-8 animate-in fade-in duration-500">
+      {loadingSolutions && (
+        <div className="flex items-center justify-center h-64">
+          <span className="loading loading-spinner loading-lg text-blue-500" />
+        </div>
+      )}
+
       {testScenarios.map((scenario) => {
         const solData = parseSolutionData(scenario.id);
         
@@ -144,7 +187,7 @@ export default function SampleSolution({ problem }) {
       })}
 
       {/* If no data at all is found */}
-      {problem?.solutions && Object.keys(problem.solutions).length === 0 && (
+      {!loadingSolutions && solutions && Object.keys(solutions).length === 0 && (
         <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-base-300 rounded-xl bg-base-50 text-gray-400 gap-2">
           <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />

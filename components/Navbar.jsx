@@ -27,7 +27,6 @@ export default function Navbar({ color }) {
       <div className="navbar-center hidden lg:flex">
         <ul className="menu menu-horizontal px-1 font-medium">
           <li><a className="hover:text-green-600 hover:bg-transparent" href="/problem">Problems</a></li>
-          <li><a className="hover:text-cyan-600 hover:bg-base-200" href="/tools">Tools</a></li>
           <li><a className="hover:text-green-500 hover:bg-base-200" href="/ComingSoon">Contest</a></li>
           <li><a className="hover:text-green-500 hover:bg-base-200" href="/ComingSoon">Discuss</a></li>
           {(user?.role === "admin" || user?.role === "creator") && (
@@ -68,7 +67,7 @@ export default function Navbar({ color }) {
             <div className="dropdown dropdown-end">
               <div tabIndex={0} role="button" className="btn btn-ghost btn-circle avatar hover:bg-green-200">
                 <div className="w-8 rounded-full border">
-                  <img alt="avatar" src={user.photoURL || "profile.png"} />
+                  <img alt="avatar" src={user.photoURL || "/profile.png"} />
                 </div>
               </div>
               

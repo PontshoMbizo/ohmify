@@ -1,16 +1,19 @@
 "use client";
 
 import Simulator from "@/components/Simulator";
+import SimulatorEmbed from "@/components/SimulatorEmbed";
 import AutoMarker from "@/components/SimulationWindow/AutoMarker/AutoMarker.jsx";
-import { GeneralUtils } from "@/lib/GeneralUtils";
+import { EMBED_CONFIG } from "@/lib/embedConfig";
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 
-export default function SolveProblem({ circuit, topics = [], testbench, testType, sampleCount, timeStep }) {
+export default function SolveProblem({ circuit, topics = [], testbench, testType, simulatorType = "circuitjs", starterCode, sampleCount, timeStep }) {
   const { id: problemId } = useParams();
   const [simResults, setSimResults] = useState(null);
   const [isCompleted, setIsCompleted] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  const isEmbedded = simulatorType !== "circuitjs";
 
   const [activeTestTab, setActiveTestTab] = useState("test1");
   const [testSuite, setTestSuite] = useState({ test1: null, test2: null, test3: null });
@@ -20,11 +23,13 @@ export default function SolveProblem({ circuit, topics = [], testbench, testType
   // Stable ref so AutoMarker's useCallback dep doesn't change on every render.
   const handleCompleted = useCallback(() => setIsCompleted(true), []);
 
-  // Load draft from localStorage on mount
+  // Load draft from localStorage on mount. For embedded sims the "circuit" is
+  // a code string (starterCode), not a CircuitJS netlist, but the same
+  // draft-persistence key works unchanged.
   useEffect(() => {
     const saved = localStorage.getItem(`draft_${problemId}`);
-    setCurrentCircuit(saved || circuit);
-  }, [problemId, circuit]);
+    setCurrentCircuit(saved || (isEmbedded ? starterCode : circuit));
+  }, [problemId, circuit, starterCode, isEmbedded]);
 
   const handleSimSubmit = (data, sim) => {
     if (sim && typeof sim.exportCircuit === "function") {
@@ -35,9 +40,21 @@ export default function SolveProblem({ circuit, topics = [], testbench, testType
     setSimResults(data);
   };
 
+  // Embedded-sim (fpga/mcu) submit: the sim posts back {code, ok, log, changes,
+  // raw}. Persist the code as the draft, then hand the payload straight to
+  // AutoMarker — it already knows (via `ok === false`) to show the log instead
+  // of grading.
+  const handleEmbedResult = useCallback((payload) => {
+    if (payload?.code) {
+      setCurrentCircuit(payload.code);
+      localStorage.setItem(`draft_${problemId}`, payload.code);
+    }
+    setSimResults(payload);
+  }, [problemId]);
+
   const confirmReset = () => {
     localStorage.removeItem(`draft_${problemId}`);
-    setCurrentCircuit(circuit);
+    setCurrentCircuit(isEmbedded ? starterCode : circuit);
     setTestSuite({ test1: null, test2: null, test3: null });
     setResetKey(prev => prev + 1);
     setIsCompleted(false);
@@ -101,9 +118,10 @@ export default function SolveProblem({ circuit, topics = [], testbench, testType
         </div>
       )}
 
-      {simResults ? (
+      {simResults && (
         <AutoMarker
           testType={testType}
+          simulatorType={simulatorType}
           activeTestTab={activeTestTab}
           setActiveTestTab={setActiveTestTab}
           testSuite={testSuite}
@@ -115,13 +133,36 @@ export default function SolveProblem({ circuit, topics = [], testbench, testType
           problemId={problemId}
           onCompleted={handleCompleted}
         />
-      ) : (
+      )}
+
+      {/* The embedded sim stays MOUNTED (just display:none) while results
+          show — unmounting would reload the whole cross-origin sim app on
+          back-nav and lose the user's editor/waveform state, restorable only
+          via a racy re-init. circuitjs runs in-process and restores from the
+          exported netlist, so it keeps the cheaper unmount behaviour. */}
+      {isEmbedded ? (
+        <div className={`relative h-full ${simResults ? "hidden" : ""}`}>
+          <SimulatorEmbed
+            key={`${problemId}-${resetKey}`}
+            {...EMBED_CONFIG[simulatorType]}
+            bridge={{
+              mode: "solve",
+              starterCode: currentCircuit,
+              testbench: testbench?.testbench,
+              engine: testbench?.engine,
+              signal: testbench?.signal,
+              duration: testbench?.duration,
+              onResult: handleEmbedResult,
+            }}
+          />
+        </div>
+      ) : !simResults && (
         <div className="relative h-full">
           <Simulator
             key={`${problemId}-${resetKey}`}
             circuit={currentCircuit}
             onSubmit={handleSimSubmit}
-            isDigital={GeneralUtils.isDigitalProblem(topics)}
+            isDigital={testType === "digital"}
             loads={loads}
             sampleCount={sampleCount}
             timeStep={timeStep}

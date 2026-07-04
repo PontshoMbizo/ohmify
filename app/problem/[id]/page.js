@@ -4,7 +4,7 @@ import ProblemWindow from "@/components/ProblemDescriptionWindow/ProblemWindow";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { db } from "@/lib/firebase";
-import { doc, getDoc, collection, getDocs } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import LoadingAnimation from "@/components/LoadingAnimation";
 import SolveProblem from "@/components/SimulationWindow/SolveProblem";
 import ResizableSplit from "@/components/ResizableSplit";
@@ -21,10 +21,12 @@ export default function ProblemPage() {
 
     const loadProblem = async () => {
       try {
-        const [metaSnap, circuitSnap, solutionSnap] = await Promise.all([
+        // solutionWaveform (the golden waveforms) is deliberately NOT fetched
+        // here — the docs are large packed sample strings that only the
+        // Solutions tab needs; SampleSolution lazy-loads them on first open.
+        const [metaSnap, circuitSnap] = await Promise.all([
           getDoc(doc(db, "Problems", id)),
           getDoc(doc(db, "Problems", id, "initialCircuit", "data")),
-          getDocs(collection(db, "Problems", id, "solutionWaveform")),
         ]);
 
         if (controller.signal.aborted) return;
@@ -34,20 +36,13 @@ export default function ProblemPage() {
           return;
         }
 
-        // The "Solutions" tab (SampleSolution) reads problem.solutions —
-        // previously this was never fetched, so the tab always rendered blank.
-        // Keep the full doc per key ({ samples, sampleRate, decimation }) so the
-        // tab can decode the packed format and scale its time axis.
-        const solutions = {};
-        solutionSnap.forEach(d => { solutions[d.id] = d.data(); });
-
         const metaData = metaSnap.data();
         setProblem({
           ...metaData,
           id,
           initialCircuit: circuitSnap.data()?.payload || "",
-          solutions,
           testType: metaData.testType?.trim() || (metaData.isDigital ? "digital" : "load"),
+          simulatorType: metaData.simulatorType || "circuitjs",
         });
       } catch (err) {
         if (controller.signal.aborted) return;
@@ -85,6 +80,8 @@ export default function ProblemPage() {
             timeStep={problem.timeStep}
             testbench={problem.testbench}
             testType={problem.testType}
+            simulatorType={problem.simulatorType}
+            starterCode={problem.starterCode}
           />
         }
       />

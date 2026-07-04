@@ -263,6 +263,9 @@ function gradeAnalogCapture({ problem, testType, testbench, topics, solutionsMap
       },
     },
     freqLabels: targetBode.freq,
+    // getFrequencyData skips near-zero bins per call, so the user's and the
+    // golden's freq arrays can differ — each series must carry its own x-axis.
+    userFreqLabels: userBode.freq,
     userSpectrum: userBode.outputSpectrum,
     solutionSpectrum: targetBode.outputSpectrum,
     userBodeMag: userBode.bodeMag,
@@ -354,6 +357,9 @@ export async function POST(request) {
     const testType = problem.testType?.trim() || (problem.isDigital ? "digital" : "load");
     const topics = Array.isArray(problem.topics) ? problem.topics : [];
     const testbench = problem.testbench || {};
+    // Engine discriminator, orthogonal to testType — absent on every problem
+    // created before this field existed, so default to the original engine.
+    const simulatorType = problem.simulatorType || "circuitjs";
 
     if (!["load", "signal", "digital"].includes(testType)) {
       console.error(`[grade] Problem ${problemId} has invalid testType "${testType}"`);
@@ -415,7 +421,48 @@ export async function POST(request) {
     // ── Single-test path (signal/digital, or one load tab). ──
     let testResult;
 
-    if (testType === "digital") {
+    if (simulatorType !== "circuitjs") {
+      // FPGA/MCU: exact-sequence grading of one named signal/pin, extracted
+      // client-side (inside the embedded sim, before the postMessage bridge
+      // sent it here) from a VCD or pin trace. testType stays "signal" for
+      // these — requiredTests/writeUserProgress below need no changes.
+      if (!Array.isArray(capturedData.changes)) {
+        return NextResponse.json(
+          { error: "capturedData.changes must be an array for fpga/mcu problems" },
+          { status: 400 }
+        );
+      }
+      if (capturedData.changes.length > MAX_DIGITAL_ROWS) {
+        return NextResponse.json(
+          { error: `capturedData.changes exceeds the maximum of ${MAX_DIGITAL_ROWS} entries` },
+          { status: 400 }
+        );
+      }
+
+      const golden = solutionsMap[testKey];
+      if (!golden || !Array.isArray(golden.changes) || golden.changes.length === 0) {
+        console.error(`[grade] Missing/malformed ${simulatorType} golden for problem ${problemId} key ${testKey}`);
+        return NextResponse.json(
+          { error: "Solution data is missing or malformed. Contact the problem creator." },
+          { status: 500 }
+        );
+      }
+
+      const grade = gradingUtils.gradeSequence(capturedData.changes, golden.changes);
+      const verdict = gradingUtils.getVerdict(grade.matchRatio, topics, true);
+      // Reported as type "digital" (with the engine kept alongside for
+      // display) so the existing Logic Analyzer / Truth Table UI in
+      // Results.jsx renders this with no changes — a sequence-of-changes
+      // grade is structurally identical to a digital cycle table.
+      testResult = {
+        type: "digital",
+        simulatorType,
+        signal: testbench.signal || "",
+        table: grade.details.map(d => ({ cycle: d.index, expected: d.expected, actual: d.actual, passed: d.passed })),
+        verdict: { ...verdict, matchRatio: grade.matchRatio },
+        summary: { total: grade.total, correct: grade.correctCount },
+      };
+    } else if (testType === "digital") {
       if (!Array.isArray(capturedData.table)) {
         return NextResponse.json(
           { error: "capturedData.table must be an array for digital problems" },

@@ -27,6 +27,7 @@ export default function AutoMarker({
   topics = [],
   testType = "load",
   testbench = {},
+  simulatorType = "circuitjs",
   activeTestTab,
   setActiveTestTab,
   testSuite,
@@ -36,6 +37,7 @@ export default function AutoMarker({
 }) {
   const { user } = useAuth();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [runError, setRunError] = useState(null);
   const lastProcessedDataRef = useRef(null);
   const activeTestTabRef = useRef(activeTestTab);
   useEffect(() => { activeTestTabRef.current = activeTestTab; }, [activeTestTab]);
@@ -45,9 +47,11 @@ export default function AutoMarker({
   // one capture; throws on a server error so callers can decide whether to
   // continue (load sweep) or surface it (single submit).
   const gradeOne = useCallback(async (testKey, data) => {
-    const capturedPayload = testType === "digital"
-      ? { table: data.table }
-      : buildAnalogPayload(data);
+    const capturedPayload = simulatorType !== "circuitjs"
+      ? { changes: data.changes }
+      : testType === "digital"
+        ? { table: data.table }
+        : buildAnalogPayload(data);
 
     // Send the Firebase ID token — server extracts uid from it, never trusts body.
     const token = await user?.getIdToken?.() || null;
@@ -72,7 +76,7 @@ export default function AutoMarker({
     const { testResult, isCompleted } = await res.json();
     setTestSuite(prev => ({ ...prev, [testKey]: testResult }));
     if (isCompleted) onCompleted?.();
-  }, [problemId, testType, user, setTestSuite, onCompleted]);
+  }, [problemId, testType, simulatorType, user, setTestSuite, onCompleted]);
 
   // Load-sweep grade: send all three captures in one request. The server grades
   // each against its golden, writes progress once, and returns per-test results
@@ -96,14 +100,17 @@ export default function AutoMarker({
 
     if (res.status === 413) {
       // Body too large for a single round-trip — grade each load separately.
+      const failed = [];
       for (const key of ["test1", "test2", "test3"]) {
         if (!tests[key]) continue;
         try {
           await gradeOne(key, tests[key]);
         } catch (err) {
           console.error(`Grading ${key} failed:`, err);
+          failed.push(`${key}: ${err.message}`);
         }
       }
+      if (failed.length) setRunError(failed.join("\n"));
       return;
     }
 
@@ -114,7 +121,11 @@ export default function AutoMarker({
 
     const { testResults = {}, errors = {}, isCompleted } = await res.json();
     setTestSuite(prev => ({ ...prev, ...testResults }));
-    for (const [key, msg] of Object.entries(errors)) console.error(`Grading ${key} failed:`, msg);
+    const errorLines = Object.entries(errors).map(([key, msg]) => `${key}: ${msg}`);
+    if (errorLines.length) {
+      console.error("Grading errors:", errors);
+      setRunError(errorLines.join("\n"));
+    }
     if (isCompleted) onCompleted?.();
   }, [problemId, user, setTestSuite, onCompleted, gradeOne]);
 
@@ -125,6 +136,7 @@ export default function AutoMarker({
       await gradeOne(testKey, data);
     } catch (err) {
       console.error("Grading failed:", err);
+      setRunError(err.message || "Grading failed — please try again.");
     } finally {
       setIsProcessing(false);
     }
@@ -138,6 +150,7 @@ export default function AutoMarker({
       await gradeBatch(tests);
     } catch (err) {
       console.error("Batch grading failed:", err);
+      setRunError(err.message || "Grading failed — please try again.");
     } finally {
       setIsProcessing(false);
     }
@@ -146,13 +159,21 @@ export default function AutoMarker({
   useEffect(() => {
     if (!capturedData || capturedData === lastProcessedDataRef.current) return;
     lastProcessedDataRef.current = capturedData;
+    // fpga/mcu: a failed compile/runtime in the embedded sim arrives as
+    // `ok: false` — surface the sim's own log instead of calling /api/grade
+    // with nothing to compare.
+    if (simulatorType !== "circuitjs" && capturedData.ok === false) {
+      setRunError(capturedData.log || "Run failed in the simulator.");
+      return;
+    }
+    setRunError(null);
     if (capturedData.type === "loadSweep" && capturedData.tests) {
       gradeSweep(capturedData.tests);
     } else {
       const tabKey = testType === "signal" ? "test1" : activeTestTabRef.current;
       gradeTest(tabKey, capturedData);
     }
-  }, [capturedData, gradeTest, gradeSweep, testType]);
+  }, [capturedData, gradeTest, gradeSweep, testType, simulatorType]);
 
   const isDigital = testType === "digital";
   const isSignal = testType === "signal";
@@ -172,6 +193,15 @@ export default function AutoMarker({
           </h1>
         </div>
       </div>
+
+      {/* Signed-out submissions grade normally but the server never writes
+          UserProgress — without this notice the missing completion is silent. */}
+      {!user && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 text-xs font-semibold">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="size-4 shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>
+          You&apos;re not signed in — this attempt is graded but won&apos;t be saved to your progress.
+        </div>
+      )}
 
       {/* MULTI-TEST TABS: hidden for signal problems */}
       {!isSignal && (
@@ -204,6 +234,15 @@ export default function AutoMarker({
           <div className="flex flex-col items-center justify-center py-20 gap-2">
             <LoadingAnimation />
             <p className="text-sm opacity-60 mt-6 animate-pulse uppercase font-semibold tracking-wider text-green-600">Processing Waveform…</p>
+          </div>
+        ) : runError ? (
+          // A fresh failure must outrank a stale verdict: runError is cleared at
+          // the start of every grade attempt, so if it's set it belongs to the
+          // LATEST submit — showing the previous run's Results here would
+          // silently mask a compile/grade failure behind an old "Accepted".
+          <div className="flex flex-col items-center justify-center p-20 bg-red-50 text-center rounded-xl border-dashed border-2 border-red-200 m-4">
+            <p className="text-sm font-bold text-red-600 uppercase tracking-widest text-center">Run Failed</p>
+            <pre className="text-xs text-red-700 mt-2 max-w-lg mx-auto whitespace-pre-wrap text-left">{runError}</pre>
           </div>
         ) : currentData?.verdict ? (
           <div className="animate-in fade-in zoom-in-95 duration-500 p-4">
