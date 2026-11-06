@@ -2,13 +2,22 @@
 
 **A LeetCode-style platform for electronics engineers.** Pick a problem, solve it in an embedded simulator (analog circuits, Verilog on an FPGA, or bare-metal C on a microcontroller), and get graded automatically against a reference solution.
 
-Status: **in development, not deployed yet.** Target stack is Vercel and Firebase, both on free tiers (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)).
+Early demo: **https://ohmify-pi.vercel.app** (Vercel and Firebase free tiers, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)). The problem library and analog simulator are open to browse. Sign-in with Google is needed to submit solutions.
 
-<p align="center"><img src="docs/images/scope_simulator.png" width="720" alt="The embedded circuit simulator running an RLC circuit, with live scope traces for the inductor, capacitor and resistor"></p>
+<p align="center"><img src="docs/images/scope_problem_page.jpg" width="720" alt="A problem page: description on the left, the embedded circuit simulator on the right"></p>
 
-*The embedded CircuitJS simulator mid-run: an RLC circuit with live scope traces and a resonant-frequency readout. The simulator's samples are what get graded.*
+*A problem page on the demo: the description and tabs on the left, the embedded CircuitJS simulator on the right.*
 
-<!-- TODO: add a screenshot of the problem page (description, editorial, solutions tabs) and of the grading result -->
+<p align="center">
+<img src="docs/images/scope_library.jpg" height="300" alt="The problem library filtered by topic, with difficulty labels">
+<img src="docs/images/scope_landing.jpg" height="300" alt="The scope.io landing page with a waitlist form">
+</p>
+
+*Left: the problem library, filterable by topic, with difficulty ratings. Right: the landing page and waitlist.*
+
+<p align="center"><img src="docs/images/scope_simulator.png" width="560" alt="The embedded circuit simulator running an RLC circuit, with live scope traces for the inductor, capacitor and resistor"></p>
+
+*The embedded simulator mid-run: an RLC circuit with live scope traces and a resonant-frequency readout. The simulator's samples are what get graded.*
 
 ## How it works
 
@@ -45,7 +54,7 @@ flowchart LR
 | Area | Result |
 |---|---|
 | Unit tests | 126 test cases in 7 Vitest files: grading, signal processing, sampling, waveform codec, netlist parsing, circuit discovery, general utilities |
-| Problem set | 26 problems: 9 CircuitJS, 9 FPGA, 8 MCU, each with a model answer |
+| Problem set | 26 problems written (9 CircuitJS, 9 FPGA, 8 MCU), each with a model answer. 7 are seeded on the demo so far |
 | FPGA model answers | Each design simulated against its self-checking testbench under Icarus Verilog |
 | MCU model answers | Algorithmic core compiled and unit-tested on a host PC, then built as firmware for mcusim |
 | App surface | 13 pages and 4 API routes (grade, account delete, admin problems, admin users) |
@@ -66,7 +75,7 @@ Combinational, sequential and digital-systems problems use exact match instead.
 
 ### Limits
 
-- Not deployed, so there is no live demo or usage data yet.
+- The demo is early: 7 problems are seeded and there is no usage data yet.
 - Grading works on submitted waveform samples, not on the circuit itself. Verifying the circuit is future work.
 - Security rules live in `firestore.rules` and must be deployed to Firebase. The repo copy is not enough.
 - Problem quality has only been checked by the author so far, not by outside testers.
