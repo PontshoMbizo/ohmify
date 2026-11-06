@@ -1,166 +1,101 @@
-# Scope.io — Project Architecture
+# scope.io
 
-This repository implements Scope.io: a web platform for electronics problem solving that combines authored problems, embedded CircuitJS simulations, and automated verification/grading of circuit solutions.
+**A LeetCode-style platform for electronics engineers.** Pick a problem, solve it in an embedded simulator (analog circuits, Verilog on an FPGA, or bare-metal C on a microcontroller), and get graded automatically against a reference solution.
 
-This README documents the project architecture in a hierarchical way: a high-level overview, architecture diagrams, and detailed descriptions of routes, components, data model, and developer/run instructions.
+Status: **in development, not deployed yet.** Target stack is Vercel and Firebase, both on free tiers (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)).
 
-## High-level purpose
+<p align="center"><img src="docs/images/scope_simulator.png" width="720" alt="The embedded circuit simulator running an RLC circuit, with live scope traces for the inductor, capacitor and resistor"></p>
 
-- Provide a LeetCode-like experience for electronics engineers: browse problems, open an interactive/automated simulator, submit solutions, and receive automated feedback.
-- Persist problems, circuits, and graded solution artifacts in Firestore and authenticate users with Firebase Auth (Google sign-in).
-- Support deterministic sampling from CircuitJS for reproducible grading and CSV export for offline analysis.
+*The embedded CircuitJS simulator mid-run: an RLC circuit with live scope traces and a resonant-frequency readout. The simulator's samples are what get graded.*
 
-## Tech stack
+<!-- TODO: add a screenshot of the problem page (description, editorial, solutions tabs) and of the grading result -->
 
-- Frontend: Next.js (App Router) + React 19
-- Styling: Tailwind CSS + daisyUI
-- Simulation: CircuitJS (embedded under `public/circuitAPI/`)
-- Data & Auth: Firebase v12 (Auth + Firestore)
-- Charts & math: Chart.js, react-chartjs-2, MathJax
-
-## Architecture diagrams
-
-High-level architecture (services and major responsibilities):
-
-  ```mermaid
-flowchart LR
-  Browser -->|Next.js pages| NextApp[NextJS App Frontend]
-  NextApp -->|uses| Firebase[Firebase Auth and Firestore]
-  NextApp -->|embeds| CircuitJS[CircuitJS iframe]
-  CircuitJS -->|exports| Waveforms[Waveform CSV samples]
-  Firebase -->|stores| Firestore[Problems Users UserProgress]
-  NextApp -->|renders| UI[Navbar ProblemList Simulator Grader]
-
-  style NextApp fill:#f0f9ff,stroke:#67c4ff
-  style Firebase fill:#fff4f0,stroke:#ffb37a
-  style CircuitJS fill:#f6fff0,stroke:#b7e17a
-  ```
-
-Route → Component map (simplified):
+## How it works
 
 ```mermaid
 flowchart LR
-  subgraph AppRoutes
-    A[Landing page] --> Navbar[Navbar component]
-    B[Problem list page] --> ProblemList[ProblemList component]
-    C[Problem detail page] --> ProblemWindow[ProblemWindow component]
-    C --> SolveProblem[SolveProblem component]
-    D[Create page] --> CreateProblem[CreateProblem component]
-    E[Admin page] --> ComingSoon[ComingSoon component]
-  end
+  U[Browser: problem page] --> SIM[Embedded simulator]
+  SIM -->|waveform samples| G["/api/grade"]
+  G -->|fetch problem, derive test config| FS[(Firestore)]
+  G --> V[Verdict: score, pass or fail]
+  V --> FS
+  U --> AUTH[Firebase Auth: Google sign-in]
+  U -.->|"/tools/fpga"| F[fpgasim]
+  U -.->|"/tools/mcu"| M[mcusim]
 ```
 
-Data model (core Firestore collections and typical document layout):
+- **Three kinds of problem.** Analog circuits run in an embedded [CircuitJS](https://github.com/PontshoMbizo/circuitjs1) simulator. Digital design problems run in [fpgasim](https://github.com/PontshoMbizo/fpgasim) (Verilog on a Tang Nano 9K). Firmware problems run in [mcusim](https://github.com/PontshoMbizo/mcusim) (bare-metal C on an STM32 Blue Pill). Both embed as iframes.
+- **Automatic grading.** The simulator exports samples deterministically. The server compares them with a golden waveform and returns a verdict, so results are reproducible.
+- **Creator workflow.** Creators and admins author problems at `/create` with a starter circuit, a reference solution and test cases.
+- **Accounts and progress.** Google sign-in through Firebase Auth. Problems, submissions and user progress live in Firestore.
 
-```mermaid
-flowchart TD
-  Problems --> ProblemDoc
-  ProblemDoc --> InitialCircuit
-  ProblemDoc --> SolutionWaveform
+## Design choices
 
-  Users --> UserDoc
-  UserProgress --> ProgressDoc
+| Decision | Why |
+|---|---|
+| Grade on the server, and derive the test config from the stored problem | The client sends only the problem id and its samples. Topics, test type and testbench come from Firestore, so a user cannot pick an easier threshold |
+| Hybrid error for analog problems: 70% time-domain NRMSE, 20% frequency-domain NRMSE, 10% key features (RMS, peak, settling time) | A waveform can match in shape but not in spectrum or timing. Blending the three is harder to game than any one |
+| Exact cycle match for digital problems | Digital behaviour is right or wrong, so a tolerance would hide bugs |
+| Pass thresholds per topic | A power-electronics waveform tolerates more error than a combinational circuit, so each topic has its own limit |
+| Discovery by convention in the capture engine (voltmeter and labelled `input`, `clk`, `Output` elements) | Problem authors do not need to write glue code for each circuit |
+| Firestore rules lock role, points and progress against client writes | Scores and roles can only change through the server |
 
-  style Problems fill:#fff7e6
-  style Users fill:#fff7e6
-```
+## Findings
 
-## Hierarchical walkthrough (high → low)
+| Area | Result |
+|---|---|
+| Unit tests | 126 test cases in 7 Vitest files: grading, signal processing, sampling, waveform codec, netlist parsing, circuit discovery, general utilities |
+| Problem set | 26 problems: 9 CircuitJS, 9 FPGA, 8 MCU, each with a model answer |
+| FPGA model answers | Each design simulated against its self-checking testbench under Icarus Verilog |
+| MCU model answers | Algorithmic core compiled and unit-tested on a host PC, then built as firmware for mcusim |
+| App surface | 13 pages and 4 API routes (grade, account delete, admin problems, admin users) |
+| Data model | 4 Firestore collections: Problems, Submissions, UserProgress, Users |
+| CI | Lint, tests and a production build on every push |
 
-1) Application shell
+### Pass thresholds for analog problems
 
-- `app/layout.js` — global layout. Wraps the site with `AuthProvider` and renders the `Navbar`. See `app/layout.js`.
+| Topic | Maximum error |
+|---|---|
+| Power Electronics | 30% |
+| RF Electronics | 12% |
+| Signal Processing | 10% |
+| Control Systems | 8% |
+| Default | 5% |
 
-2) Entry pages
+Combinational, sequential and digital-systems problems use exact match instead.
 
-- `app/page.js` — Landing/marketing UI using `components/LandingPage/*`.
-- `app/problem/page.js` — Problems listing page. Fetches `Problems` and the user's `UserProgress` (completed problems) and renders `components/ProblemList.jsx` and `components/Drawer.jsx`.
-- `app/problem/[id]/page.js` — Problem detail; loads the problem metadata, the `initialCircuit` subdocument and `solutionWaveform` subcollection, then renders `ProblemWindow` and `SolveProblem`.
+### Limits
 
-3) Authentication & user state
+- Not deployed, so there is no live demo or usage data yet.
+- Grading works on submitted waveform samples, not on the circuit itself. Verifying the circuit is future work.
+- Security rules live in `firestore.rules` and must be deployed to Firebase. The repo copy is not enough.
+- Problem quality has only been checked by the author so far, not by outside testers.
 
-- `lib/firebase.js` — Firebase initialization using env vars `NEXT_PUBLIC_FIREBASE_*`.
-- `components/Auth/AuthProvider.jsx` — listens to `onAuthStateChanged`, loads user full profile from `Users/{uid}` (or calls `syncUserDocument`), and exposes `useAuth()` with `user`, `loading`, `signIn`, and `signOut`.
-- `lib/authUtils.js` — Google sign-in via popup and `syncUserDocument()` that creates a `Users/{uid}` doc.
+## Run it locally
 
-4) Problem CRUD and data flow
-
-- Problems are stored in the `Problems` collection. Each `Problems/{id}` can contain subcollections such as `initialCircuit` (document `data`) and `solutionWaveform` (documents with `samples`, `sampleRate`, metadata).
-- When viewing a problem (`app/problem/[id]/page.js`), the page fetches the metadata + `initialCircuit/data` + `solutionWaveform` docs and passes them to the simulator/grader components.
-
-5) Simulation & Grading
-
-- `components/Simulator.jsx` (and `components/SimulationWindow/*`) embed CircuitJS (from `public/circuitAPI/`) in an iframe, programmatically import the netlist, and deterministically advance the simulator to capture samples via `sim.ontimestep`.
-- **Grading runs server-side.** `AutoMarker.jsx` POSTs the captured samples to `app/api/grade/route.js`, which fetches the golden solution, runs the comparison, and writes `UserProgress` via the Admin SDK. The client never decides pass/fail. This is the security boundary — see `docs/ARCHITECTURE.md` §2.
-- Three grading modes (`problem.testType`): `load` (Normalized RMSE across No-load/Max/Min testbench loads), `signal` (single capture + spectral/Bode comparison), `digital` (clock-synchronized bit-packed bus values vs a golden decimal table).
-
-6) UI components
-
-- `components/Navbar.jsx` — global navigation; uses `useAuth()` for conditional UI (Create/Admin links, avatar, sign-in/out).
-- `components/ProblemList.jsx` — topic filters, difficulty badges, and completion markers (reads a `Set` of completed problem ids from `app/problem/page.js`).
-- `components/ProblemDescriptionWindow/*` — problem statement, editorial, sample solutions UI.
-- `components/SimulationWindow/*` — SolveProblem, auto-marker, and simulator controls.
-
-## Developer: run & env instructions
-
-1. Install deps
+Requires Node 20+ and a Firebase project (Auth with Google sign-in, and Firestore).
 
 ```bash
 npm install
+cp .env.example .env.local     # fill in your Firebase web config and service account
+firebase deploy --only firestore:rules,firestore:indexes
+npm run dev                    # http://localhost:3000
 ```
-
-2. Local environment variables (create a `.env.local` at project root). Minimum required keys:
-
-- `NEXT_PUBLIC_FIREBASE_API_KEY`
-- `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
-- `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
-- `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
-- `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
-- `NEXT_PUBLIC_FIREBASE_APP_ID`
-- `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` (optional)
-
-Example `.env.local` (do not commit):
-
-```env
-NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
-NEXT_PUBLIC_FIREBASE_APP_ID=...
-```
-
-3. Run locally
 
 ```bash
-npm run dev
+npm test         # Vitest
+npm run lint
+npm run build
 ```
 
-4. Notes about local simulator assets
+`.env.local` holds a real Firebase service-account key. It is git-ignored: never commit it, and rotate the key if it ever leaks.
 
-- The embedded CircuitJS runtime and helper pages live in `public/circuitAPI/`. Those files are loaded into an iframe by `components/Simulator.jsx`.
+To use the FPGA and MCU tools locally, run [fpgasim](https://github.com/PontshoMbizo/fpgasim) on port 3001 and [mcusim](https://github.com/PontshoMbizo/mcusim) on port 3002 and point `NEXT_PUBLIC_NIKA_URL` and `NEXT_PUBLIC_STM_URL` at them. See [docs/TOOLS.md](docs/TOOLS.md).
 
-## Where to look for core logic (quick pointers)
+## Docs
 
-- Firebase init: `lib/firebase.js` (client) · `lib/firebaseAdmin.js` (server)
-- Server-side grading (the trust boundary): `app/api/grade/route.js`
-- Pure analysis helpers: `lib/gradingUtils.js`, `lib/signalUtils.js`, `lib/samplingUtils.js`
-- Auth: `lib/authUtils.js` + `components/Auth/AuthProvider.jsx`
-- Problems list: `app/problem/page.js` + `components/ProblemList.jsx`
-- Problem detail + grader UI: `app/problem/[id]/page.js` + `components/SimulationWindow/*`
-- Simulator iframe integration: `components/Simulator.jsx` and `public/circuitAPI/`
+[Architecture](docs/ARCHITECTURE.md), [simulator integration](docs/SIMULATOR.md), [tools](docs/TOOLS.md), [deployment](docs/DEPLOYMENT.md), [UI](docs/UI.md), [creator conventions](docs/CREATOR-CONVENTIONS.md), [route map](docs/route_map.md), [Firestore rules](docs/firestore_rules.md).
 
-## Documentation
+## Licence
 
-- `docs/ARCHITECTURE.md` — CircuitJS contract, grading pipeline, data model, rules, roles
-- `docs/CREATOR-CONVENTIONS.md` — circuit labeling rules a problem must follow to grade
-- `docs/DEPLOYMENT.md` — Vercel + Firebase free-tier deploy and ops
-- `docs/REVIEW-2026-06-11.md` — latest review: what changed, why, and the prod roadmap
-- `CLAUDE.md` — orientation for AI assistants
-- `TASKS.md` — issue/task board
-
-## Tests
-
-```bash
-npm test        # vitest — 63 tests over the lib/ analysis modules
-```
+GPL-2.0-or-later, see [LICENSE](LICENSE). scope.io embeds [circuitjs1](https://github.com/PontshoMbizo/circuitjs1) (a fork of Paul Falstad's CircuitJS, GPL-2.0-or-later) as the `public/circuitAPI` submodule, and the whole project is licensed to match. Other dependencies keep their own licences.

@@ -1,5 +1,6 @@
 {
   "name": "scope.io",
+  "license": "GPL-2.0-or-later",
   "version": "0.1.0",
   "private": true,
   "scripts": {

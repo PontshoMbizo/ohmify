@@ -50,3 +50,11 @@ next-env.d.ts
 /.design-sync/.cache/
 /.design-sync/learnings/
 /.design-sync/node_modules
+
+# credentials: never commit service-account keys, private keys or certificates
+*firebase-adminsdk*.json
+*serviceAccount*.json
+*service-account*.json
+*.pem
+*.key
+*.p12
