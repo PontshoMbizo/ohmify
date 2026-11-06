@@ -131,3 +131,11 @@ The `/tools` area embeds two externally-hosted simulators (FPGA + MCU) via ifram
 - When touching Firestore access, check `app/problem/page.js`, `app/problem/[id]/page.js`, and `app/api/grade/route.js`.
 - Keep CircuitJS interaction inside `Simulator.jsx`.
 - Prefer editing existing components over creating new ones unless the feature clearly warrants it.
+
+## Definition of done
+- `npm test` (vitest suite over the four `lib/` modules) and `npm run lint` pass.
+- Grading touched → all three modes re-checked, route validation intact, and no trust moved
+  client-side (no client writes to `UserProgress`; `testType`/`testbench` still read from the
+  problem doc, never the request).
+- UI touched → matches `UI.md`; no new colours, fonts, or icon sets.
+- Creator-flow touched → a problem built through the 4-step studio still grades end-to-end.

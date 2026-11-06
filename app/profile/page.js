@@ -1,24 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/components/Auth/AuthProvider";
-import { db, auth } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import {
-  collection, query, where, getDocs, doc, getDoc, updateDoc
+  collection, query, where, getDocs, doc, getDoc
 } from "firebase/firestore";
-import { updateProfile } from "firebase/auth";
 import LoadingAnimation from "@/components/LoadingAnimation";
 import Link from "next/link";
+import { Settings } from "lucide-react";
 
 export default function ProfilePage() {
   const { user, loading } = useAuth();
 
   const [completedProblems, setCompletedProblems] = useState([]);
   const [progressLoading, setProgressLoading] = useState(true);
-
-  const [displayName, setDisplayName] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [saveMsg, setSaveMsg] = useState(null);
 
   // Fetch completed problems from UserProgress (authoritative source after C1 migration)
   useEffect(() => {
@@ -39,6 +35,9 @@ export default function ProfilePage() {
               problemId,
               title: probSnap.exists() ? probSnap.data().title : problemId,
               difficulty: probSnap.exists() ? probSnap.data().difficulty : "",
+              topics: probSnap.exists() && Array.isArray(probSnap.data().topics)
+                ? probSnap.data().topics
+                : [],
               completedAt,
               score: score ?? 100,
             };
@@ -55,41 +54,39 @@ export default function ProfilePage() {
     load();
   }, [user?.uid]);
 
-  // Pre-fill display name input when user loads
-  useEffect(() => {
-    if (user?.displayName) setDisplayName(user.displayName);
-  }, [user?.displayName]);
-
-  const saveDisplayName = async () => {
-    const trimmed = displayName.trim();
-    if (!trimmed || trimmed === user.displayName) return;
-    setSaving(true);
-    setSaveMsg(null);
-    try {
-      if (auth.currentUser) {
-        await updateProfile(auth.currentUser, { displayName: trimmed });
-      }
-      await updateDoc(doc(db, "Users", user.uid), { displayName: trimmed });
-      setSaveMsg("Saved!");
-    } catch (e) {
-      console.error("Display name update failed:", e);
-      setSaveMsg("Failed — try again.");
-    } finally {
-      setSaving(false);
-      setTimeout(() => setSaveMsg(null), 3000);
-    }
-  };
+  // Solved-problem counts per engineering domain, most active first.
+  const domainCounts = useMemo(() => {
+    const counts = new Map();
+    completedProblems.forEach(p =>
+      p.topics.forEach(t => counts.set(t, (counts.get(t) || 0) + 1))
+    );
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  }, [completedProblems]);
 
   if (loading) return <LoadingAnimation />;
-  if (!user) return (
-    <div className="flex h-screen items-center justify-center bg-white">
-      <p className="text-gray-400 italic">Please sign in to access your engineer profile.</p>
-    </div>
-  );
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center px-6">
+        <div className="text-center space-y-4 max-w-sm">
+          <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Profile</p>
+          <h1 className="text-2xl font-black uppercase tracking-tighter text-gray-900">Sign in required</h1>
+          <p className="text-sm text-gray-500 leading-relaxed">
+            Sign in to view your engineer profile and submission history.
+          </p>
+          <Link href="/" className="inline-block text-sm text-green-600 font-semibold hover:underline">
+            ← Back to home
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const diffColor = { Easy: "text-green-500", Medium: "text-yellow-500", Hard: "text-red-500" };
   const solvedCount = completedProblems.length;
   const streak = user.streak ?? 0;
+  const memberSince = user.createdAt?.seconds
+    ? new Date(user.createdAt.seconds * 1000).toLocaleDateString(undefined, { year: "numeric", month: "long" })
+    : null;
 
   return (
     <div className="min-h-screen bg-white text-gray-800 pt-20 pb-10 px-6">
@@ -122,34 +119,20 @@ export default function ProfilePage() {
               <p className="text-gray-400 text-sm mt-3 leading-relaxed max-w-xs">
                 {user.email}
               </p>
-            </div>
-
-            {/* Display name editor */}
-            <div className="fieldset w-full mt-4">
-              <legend className="fieldset-legend text-green-500">Display name</legend>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  className="input input-sm flex-1"
-                  value={displayName}
-                  onChange={e => setDisplayName(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && saveDisplayName()}
-                  placeholder="New display name"
-                />
-                <button
-                  onClick={saveDisplayName}
-                  disabled={saving || !displayName.trim() || displayName.trim() === user.displayName}
-                  className="btn btn-sm btn-success disabled:opacity-40"
-                >
-                  {saving ? <span className="loading loading-spinner loading-xs" /> : "Save"}
-                </button>
-              </div>
-              {saveMsg && (
-                <p className={`label text-xs mt-1 ${saveMsg.startsWith("Saved") ? "text-green-500" : "text-red-400"}`}>
-                  {saveMsg}
+              {memberSince && (
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mt-4">
+                  Member since {memberSince}
                 </p>
               )}
             </div>
+
+            {/* Account link — editing lives in /settings */}
+            <Link
+              href="/settings"
+              className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-green-600 transition-colors border border-gray-200 hover:border-green-400 rounded-full px-4 py-1.5"
+            >
+              <Settings size={15} /> Manage account
+            </Link>
           </div>
         </div>
 
@@ -170,6 +153,24 @@ export default function ProfilePage() {
               </div>
             ))}
           </div>
+
+          {/* Domain breakdown */}
+          {domainCounts.length > 0 && (
+            <div>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mb-3">Active Domains</p>
+              <div className="flex flex-wrap gap-2">
+                {domainCounts.map(([topic, count]) => (
+                  <span
+                    key={topic}
+                    className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-50 border border-green-100 text-green-700 text-xs font-bold"
+                  >
+                    {topic}
+                    <span className="bg-green-600 text-white rounded-full px-1.5 text-[10px] font-black">{count}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Latest submissions */}
           <div className="bg-white border border-gray-100 rounded-3xl p-8 shadow-sm shadow-gray-100">

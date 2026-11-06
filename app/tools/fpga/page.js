@@ -12,6 +12,7 @@ export default function FpgaToolPage() {
       title="FPGA / Verilog · Tang Nano 9K"
       envVar="NEXT_PUBLIC_NIKA_URL"
       accent="text-cyan-600"
+      hideHeader={true}
     />
   );
 }

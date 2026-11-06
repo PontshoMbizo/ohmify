@@ -9,8 +9,8 @@ phase; see "Roadmap" below.)
 
 | Route | Simulator | Board | Engine | Repo |
 |---|---|---|---|---|
-| `/tools/fpga` | **nikaVSimulator** | Tang Nano 9K | Verilog → Icarus Verilog | `PontshoMbizo/nikaVSimulator` |
-| `/tools/mcu`  | **stmVSimulator** | STM32 Blue Pill | bare-metal C → arm-none-eabi-gcc + QEMU | `PontshoMbizo/stmVSimulator` |
+| `/tools/fpga` | **fpgasim** | Tang Nano 9K | Verilog → Icarus Verilog | `PontshoMbizo/fpgasim` |
+| `/tools/mcu`  | **mcusim** | STM32 Blue Pill | bare-metal C → arm-none-eabi-gcc + QEMU | `PontshoMbizo/mcusim` |
 
 `/tools` is the hub that links to both.
 
@@ -52,15 +52,28 @@ production origin when deploying.
 
 ```bash
 # terminal 1 — FPGA sim
-cd ../nikaVSimulator && npm run dev -- -p 3001
+cd ../fpgasim && npm run dev -- -p 3001
 # terminal 2 — MCU sim
-cd ../stmVSimulator && npm run dev -- -p 3002
+cd ../mcusim && npm run dev -- -p 3002
 # terminal 3 — scope.io (set the two NEXT_PUBLIC_* URLs in .env.local first)
 npm run dev
 ```
 
 Open `/tools` → pick a simulator. (The sim backends' `/api/simulate` need a
 podman/docker runtime locally to actually run code; the UI loads regardless.)
+
+## Example problems
+
+Each simulator repo ships worked example problems (statement + starter + reference
+solution +, for FPGA, a self-checking testbench) under `examples/`:
+
+- **FPGA** — Button-Debounced Up/Down Counter: `fpgasim/examples/up-down-counter/`
+- **MCU** — Bit-Banged UART Transmitter on PC13: `mcusim/examples/uart-tx/`
+
+Open `/tools/fpga` or `/tools/mcu`, paste the example's code into the editor, and Run.
+Both are verifiable with the same toolchains the sandboxes use (`iverilog`/`vvp` for the
+FPGA example; the `podman` sandbox image for the MCU example) — see each `PROBLEM.md`.
+These are the natural seed content for the future graded-problem phase.
 
 ## Roadmap (deferred)
 

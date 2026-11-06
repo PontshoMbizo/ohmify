@@ -12,6 +12,7 @@ export default function McuToolPage() {
       title="MCU / C · STM32 Blue Pill"
       envVar="NEXT_PUBLIC_STM_URL"
       accent="text-teal-600"
+      hideHeader={true}
     />
   );
 }

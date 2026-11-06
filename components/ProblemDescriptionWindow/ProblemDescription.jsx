@@ -1,9 +1,6 @@
 "use client";
 
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
-import rehypeMathjax from "rehype-mathjax";
+import MarkdownView from "@/components/MarkdownView";
 import DigitalDataBlock from "./DigitalDataBlock";
 
 export default function ProblemDescription({ problem }) {
@@ -15,10 +12,10 @@ export default function ProblemDescription({ problem }) {
     Hard: "badge-error",
   }[problem.difficulty] || "badge-ghost";
 
-  const description = problem.description
-    .replace(/\r\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  const boardBadge = {
+    fpga: "FPGA · Tang Nano 9K",
+    mcu: "MCU · STM32 Blue Pill",
+  }[problem.simulatorType];
 
   return (
     <div className="w-full h-full p-6 overflow-y-auto bg-white text-gray-800 border-r border-base-200 scroll-smooth">
@@ -33,6 +30,12 @@ export default function ProblemDescription({ problem }) {
           <span className={`badge ${diffBadgeColor} font-bold`}>
             {problem.difficulty}
           </span>
+
+          {boardBadge && (
+            <span className="badge bg-indigo-100 text-indigo-700 font-bold">
+              {boardBadge}
+            </span>
+          )}
 
           {problem.topics?.map((t, i) => (
             <span
@@ -63,44 +66,7 @@ export default function ProblemDescription({ problem }) {
       </div>
 
       {/* Markdown + Math */}
-      <div className="prose prose-slate max-w-none mb-10">
-        <div className="not-prose">
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm, remarkMath]}
-            rehypePlugins={[rehypeMathjax]}
-            components={{
-              h1: ({ children }) => (
-                <h1 className="text-2xl font-black mt-8 mb-3">{children}</h1>
-              ),
-              h2: ({ children }) => (
-                <h2 className="text-xl font-bold mt-6 mb-2">{children}</h2>
-              ),
-              p: ({ children }) => (
-                <p className="mb-4 leading-relaxed">{children}</p>
-              ),
-              ul: ({ children }) => (
-                <ul className="list-disc pl-6 mb-4 space-y-1">{children}</ul>
-              ),
-              ol: ({ children }) => (
-                <ol className="list-decimal pl-6 mb-4 space-y-1">{children}</ol>
-              ),
-              table: ({ children }) => (
-                <div className="overflow-x-auto">
-                  <table className="table table-zebra my-6 w-full">
-                    {children}
-                  </table>
-                </div>
-              ),
-              th: ({ children }) => (
-                <th className="font-bold bg-gray-100">{children}</th>
-              ),
-              td: ({ children }) => <td>{children}</td>,
-            }}
-          >
-            {description}
-          </ReactMarkdown>
-        </div>
-      </div>
+      <MarkdownView className="mb-10">{problem.description}</MarkdownView>
 
       {/* Payloads Section with ID for Jump Link */}
       <div id="payload-section">

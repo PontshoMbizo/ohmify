@@ -9,12 +9,23 @@
 | `/problem/:id` | `app/problem/[id]/page.js` | Problem detail + simulator; loads meta, `initialCircuit`, and `solutionWaveform` via `Promise.all` |
 | `/create` | `app/create/page.js` | Problem creator — renders `CreateProblem` wizard |
 | `/help` | `app/help/page.js` | User & creator guide |
-| `/admin` | `app/admin/page.js` | Admin dashboard (placeholder) |
-| `/profile` | `app/profile/page.js` | User profile (placeholder) |
-| `/settings` | `app/settings/page.js` | Settings (placeholder) |
+| `/admin` | `app/admin/page.js` | Admin dashboard — stats, user role management, problem deletion (admin role only) |
+| `/profile` | `app/profile/page.js` | User profile — identity, stats, domain breakdown, submission history |
+| `/settings` | `app/settings/page.js` | Settings — display name, theme, data export, draft cleanup, account deletion |
 | `/business` | `app/business/page.js` | Business landing (placeholder) |
 | `/education` | `app/education/page.js` | Education landing (placeholder) |
 | `/ComingSoon` | `app/ComingSoon/page.js` | Generic coming-soon page |
+
+## API Routes
+
+| Route | File | Notes |
+|---|---|---|
+| `POST /api/grade` | `app/api/grade/route.js` | Grading pipeline; verified Bearer token, rate-limited |
+| `PATCH /api/admin/users` | `app/api/admin/users/route.js` | Role changes (`user`/`creator`/`admin`); caller must be admin; sets Firestore role + custom claim; self-change blocked |
+| `DELETE /api/admin/problems/:id` | `app/api/admin/problems/[id]/route.js` | Recursive problem delete (doc + `initialCircuit` + `solutionWaveform`); caller must be admin |
+| `POST /api/account/delete` | `app/api/account/delete/route.js` | Self-service account deletion: UserProgress rows, Users doc, Auth user |
+
+Privileged routes use `lib/serverAuth.js` (`requireUser` / `requireAdmin`) — they refuse all requests when the Admin SDK is unconfigured (no dev fallback).
 
 ---
 
